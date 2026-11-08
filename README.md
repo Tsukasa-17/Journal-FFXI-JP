@@ -1,5 +1,7 @@
 # Journal 0.3.0 by Kxteel [jpver 0.1.0 by Tsukasa]
 
+<img src="Journal/assets/journal_icon.png" alt="クエストブック" width="128">
+
 > オリジナル版の別途導入が不要な、日本語専用の完全版です。あずきフォントLPとクエストブックアイコンも含みます。
 
 2026-11-08変更の日本語派生版です。結合ソース配布はGPLv3（COPYING/CHANGES_JP.md参照）、原MIT/BSD通知とOFLフォント許諾を保持し、無保証でソースを改変・再配布できます。
@@ -7,11 +9,6 @@
 日本語専用のFFXI Journal派生版です。**Journal本体・全データ・画像・通知音・OFLフォントを含み、オリジナル版の別途導入は不要です。** 差分更新ZIPではありません。ただしFFXI本体、Windows、対応するAshitaホスト/標準ライブラリは別途必要です。
 
 英語・スペイン語で利用する方はKxteel氏のオリジナル版を使用してください。日本語版に言語選択はありません。元の配布URLは提供されたREADMEに記載がないため、無関係なリンクを原版URLとして記載しません。原版READMEはdocs/UPSTREAM_README.md、原著作権はLICENSEに保持しています。
-
-## ダウンロード
-[完全版ZIP（jp-v0.1.0）](https://github.com/Tsukasa-17/Journal-FFXI-JP/releases/download/jp-v0.1.0/Journal_JP_0.1.0_full.zip)
-
-[リリースと検査状況](https://github.com/Tsukasa-17/Journal-FFXI-JP/releases/tag/jp-v0.1.0)
 
 ## 前提と動作確認範囲
 - Windows版FFXI＋Ashita v4互換環境。ホストに付属するcommon、d3d8、imgui、settingsとLuaJIT ffiを利用します。これらはこのアドオンに複製しません。
