@@ -4981,16 +4981,138 @@ do
         return added, problem
     end
 
-    -- A click on a quest of an NPC in the compass: the Journal opens on it.
-    function M.OpenQuestFromCompass(id)
+    -- A click on a quest of the compass or of the Tracker: its sheet opens,
+    -- not the Journal. ui.lua sets sheet_hook; without it, the Journal opens.
+    function M.OpenQuestSheet(id)
         if not M.JumpToQuest(id) then
             return false
         end
 
-        M.SetJournalMini(false)
-        M.SetJournalVisible(true)
+        if M.sheet_hook ~= nil then
+            M.sheet_hook()
+        else
+            M.SetJournalMini(false)
+            M.SetJournalVisible(true)
+        end
 
         return true
+    end
+
+    function M.OpenQuestFromCompass(id)
+        return M.OpenQuestSheet(id)
+    end
+
+    function M.GetQuestIconKind(id)
+        local index = build_quest_link_index()
+        local info = index and index.by_id[id]
+
+        if info == nil then
+            return nil
+        end
+
+        local state = M.world_lock.quest_state(index, id)
+
+        if info.repeatable == true
+            and (state == 'active' or state == 'completed') then
+
+            return 'repeatable'
+        elseif state == 'active' then
+            return 'progress'
+        elseif state == 'locked' or state == 'hidden' then
+            return 'locked'
+        elseif state == 'available' then
+            return 'available'
+        elseif state == 'completed' then
+            return 'completed'
+        end
+
+        return nil
+    end
+
+    M.mission_lock = {
+        areas = {
+            bastok = true, sandoria = true, windurst = true, zilart = true,
+            cop = true, toau = true, wotg = true, adoulin = true,
+            rov = true, acp = true, mkd = true, asa = true, tvr = true,
+        },
+        sets = {},
+        time = -1000,
+    }
+
+    function M.IsMissionLocked(area, id)
+        local lock = M.mission_lock
+
+        if not lock.areas[area] then
+            return false
+        end
+
+        local now = os.clock()
+
+        if now - lock.time > 1 then
+            lock.sets = {}
+            lock.time = now
+        end
+
+        local locked = lock.sets[area]
+
+        if locked == nil then
+            locked = {}
+            lock.sets[area] = locked
+
+            local open = false
+
+            for _, mission in ipairs(tracker.GetMissionArea(area) or {}) do
+                local status = tracker.GetMissionStatus(area, mission.id)
+                    or mission_status_cache[
+                        get_status_cache_key(area, mission.id)
+                    ]
+                    or 'not_started'
+
+                if status ~= 'completed' and status ~= 'hidden' then
+                    if not open then
+                        open = true
+                    elseif status == 'not_started' then
+                        locked[mission.id] = true
+                    end
+                end
+            end
+        end
+
+        return locked[tonumber(id)] == true
+    end
+
+    function M.GetMissionIconKind(id, name)
+        for _, area in ipairs(tracker.GetMissionAreas()) do
+            for _, mission in ipairs(tracker.GetMissionArea(area) or {}) do
+                if tostring(mission.id) == tostring(id)
+                    and mission.name == name then
+                    local status = tracker.GetMissionStatus(area, mission.id)
+                        or mission_status_cache[
+                            get_status_cache_key(area, mission.id)
+                        ]
+                        or mission.status
+                        or 'not_started'
+
+                    if status == 'completed' then
+                        return 'mission_completed'
+                    elseif mission.trackable == false
+                        and status == 'not_started' then
+
+                        return nil
+                    elseif status == 'not_started'
+                        and M.IsMissionLocked(area, mission.id) then
+
+                        return 'mission_locked'
+                    elseif status == 'active' or status == 'not_started' then
+                        return 'mission_available'
+                    end
+
+                    return nil
+                end
+            end
+        end
+
+        return nil
     end
 
     -- The arrow over the NPC of the compass in the game world.
@@ -5298,6 +5420,7 @@ do
         -- The NPC of the step of a quest that is in progress (the target of
         -- the compass, or a pin).
         if kind == 'quest' and id ~= nil and index.by_id[id] ~= nil
+            and index.by_id[id].repeatable ~= true
             and M.world_lock.status_of(index.by_id[id]) == 'active' then
 
             return 'active'
@@ -5311,19 +5434,33 @@ do
 
         local locked = false
         local hidden = false
+        local repeatable = false
+        local free = false
 
-        for _, id in ipairs(ids) do
-            local state = M.world_lock.quest_state(index, id)
+        for _, quest_id in ipairs(ids) do
+            local state = M.world_lock.quest_state(index, quest_id)
 
-            if state == 'active' then
-                return 'active'
+            if state == 'active' or state == 'completed' then
+                if index.by_id[quest_id].repeatable == true then
+                    repeatable = true
+                elseif state == 'active' then
+                    return 'active'
+                end
             elseif state == 'available' then
-                return 'normal'
+                free = true
             elseif state == 'locked' then
                 locked = true
             elseif state == 'hidden' then
                 hidden = true
             end
+        end
+
+        if free then
+            return 'normal'
+        end
+
+        if repeatable then
+            return 'repeatable'
         end
 
         if locked then
@@ -6692,7 +6829,8 @@ end
 do
     local PROX_RADIUS = 30
     local PROX_INTERVAL = 1.0
-    local prox = { keep = 30, radius = 20, zone = nil, list = nil, shown = {}, at = 0, last_count = 0, auto = {}, dismissed = {} }
+    local prox = { keep = 35, radius = 30, zone = nil, list = nil, shown = {}, at = 0, last_count = 0, auto = {}, dismissed = {} }
+    M.prox_range = { radius = prox.radius, keep = prox.keep }
 
     local function build(zone)
         local by_npc = {}
@@ -6744,6 +6882,7 @@ do
                     seen[quest.id] = true
                     list[#list + 1] = {
                         name = quest.name, id = quest.id, active = true,
+                        repeatable = quest.repeatable == true,
                     }
                 end
             end
@@ -6755,7 +6894,24 @@ do
                 and M.world_lock.available(quest.id) then
 
                 seen[quest.id] = true
-                list[#list + 1] = { name = quest.name, id = quest.id }
+                list[#list + 1] = {
+                    name = quest.name, id = quest.id,
+                    repeatable = quest.repeatable == true,
+                }
+            end
+        end
+
+        if with_active then
+            for _, quest in ipairs(row.quests) do
+                if not seen[quest.id]
+                    and quest.repeatable == true
+                    and M.world_lock.status_of(quest) == 'completed' then
+
+                    seen[quest.id] = true
+                    list[#list + 1] = {
+                        name = quest.name, id = quest.id, repeatable = true,
+                    }
+                end
             end
         end
 

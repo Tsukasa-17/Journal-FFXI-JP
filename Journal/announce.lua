@@ -505,7 +505,30 @@ function M.Draw(controller, can_draw)
                     alpha
                 )
 
-                -- The quests in progress open in the Journal with a click:
+                local banner_icon = controller.worldmark ~= nil
+                    and controller.worldmark.GetIcon ~= nil
+                    and controller.worldmark.GetIcon(
+                        entry.progress and 'progress' or 'available'
+                    ) or nil
+
+                if banner_icon ~= nil then
+                    pcall(function()
+                        local min_x, min_y = imgui.GetItemRectMin()
+                        local _, max_y = imgui.GetItemRectMax()
+                        local icon_w = (max_y - min_y) * banner_icon.width / banner_icon.height
+
+                        imgui.GetWindowDrawList():AddImage(
+                            banner_icon.id,
+                            { min_x - icon_w - 6, min_y },
+                            { min_x - 6, max_y },
+                            { 0, 0 },
+                            { 1, 1 },
+                            imgui.GetColorU32({ 1, 1, 1, alpha })
+                        )
+                    end)
+                end
+
+                -- The quests open their sheet with a click:
                 -- a shaded box and a line under the name show it.
                 local quest_id = entry.ids ~= nil and entry.ids[index] or nil
 
@@ -543,7 +566,11 @@ function M.Draw(controller, can_draw)
                         if imgui.IsItemClicked()
                             and not current.persistent then
 
-                            controller.OpenQuestFromCompass(quest_id)
+                            if controller.OpenQuestSheet ~= nil then
+                                controller.OpenQuestSheet(quest_id)
+                            else
+                                controller.OpenQuestFromCompass(quest_id)
+                            end
 
                             if current.leave == nil or current.leave > t then
                                 current.leave = t

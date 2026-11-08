@@ -1,4 +1,4 @@
-# Journal 0.3.0 by Kxteel [jpver 0.2.0 by Tsukasa]
+# Journal 0.3.4 by Kxteel [jpver 0.2.1 by Tsukasa]
 
 <img src="Journal/assets/journal_icon.png" alt="クエストブック" width="128">
 
@@ -32,6 +32,16 @@ VanaCoreは、Ashitaと同じ呼び出しができる場合に使う想定です
 6. うまくいかないときは、読み込みを止めて新しい Journal を外し、残しておいた古いフォルダを戻します。設定は、必要なときだけバックアップから戻します。
 
 この説明は手順の案内です。こちらからあなたのPCのファイルを消したり変えたりはしません。
+
+## 今回増えたこと
+
+- ミッションとクエストの一覧に、進み具合が分かる小さな絵が出ます。絵のファイルが無いときは、今までどおり丸印です。
+- トラッカーや通知、コンパスに並ぶクエストにも、同じ絵が出ます。
+- 近くのクエストをコンパスへ出す範囲が、少し広くなりました。
+- コンパスやトラッカーからクエストを開くと、そのクエストの詳細だけが開きます。詳細の窓の大きさは、アドオンを読み直すまで覚えています。
+- 繰り返せるクエストは、終わったあとでも印が残ります。
+
+矢印が指す位置の計算は、これまでと同じです。
 
 ## 使い方
 
@@ -67,6 +77,6 @@ Journalを閉じると、クエストブックの絵が出ます。クリック�
 
 ## ライセンス
 
-Journalの原著作権は Copyright (c) 2026 Kxteel です。元のMIT許諾は [Journal/LICENSE](Journal/LICENSE) に原文のままあります。日本語版の表示は [jpver 0.2.0 by Tsukasa] です。プログラムの版番号は 0.3.0 のままです。
+Journalの原著作権は Copyright (c) 2026 Kxteel です。元のMIT許諾は [Journal/LICENSE](Journal/LICENSE) に原文のままあります。日本語版の表示は [jpver 0.2.1 by Tsukasa] です。プログラムの版番号は 0.3.4 です。
 
 ソースをまとめた配布物は GPLv3 です。全文は [Journal/COPYING](Journal/COPYING) にあります。無保証で、条件に従えば見ること、変えること、再配布ができます。MIT、BSD、OFLの各通知は [Journal/THIRD_PARTY_NOTICES.md](Journal/THIRD_PARTY_NOTICES.md) と [Journal/licenses](Journal/licenses) に残しています。これらの通知は消さないでください。
