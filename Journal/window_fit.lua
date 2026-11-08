@@ -142,6 +142,62 @@ function M.clamp_geometry(x, y, w, h, display_w, display_h, margin, min_w, min_h
     return math.floor(x + 0.5), math.floor(y + 0.5), math.floor(w + 0.5), math.floor(h + 0.5)
 end
 
+-- Settings window size: a saved manual size wins over the font-scaled
+-- default. Missing or invalid values use the default. Both are clamped
+-- to the display when one is known. Returns width, height, using_saved.
+function M.resolve_saved_size(saved_w, saved_h, default_w, default_h, display_w, display_h, margin, min_w, min_h)
+    local function positive(value)
+        value = tonumber(value)
+        if value == nil or value ~= value or value <= 0
+            or value == math.huge or value == -math.huge then
+            return nil
+        end
+        return value
+    end
+
+    saved_w = positive(saved_w)
+    saved_h = positive(saved_h)
+    local using_saved = saved_w ~= nil and saved_h ~= nil
+    local w = using_saved and saved_w or (positive(default_w) or 480)
+    local h = using_saved and saved_h or (positive(default_h) or 640)
+
+    display_w = positive(display_w)
+    display_h = positive(display_h)
+    if display_w ~= nil and display_h ~= nil then
+        local _, _, cw, ch = M.clamp_geometry(
+            margin or 16,
+            margin or 16,
+            w,
+            h,
+            display_w,
+            display_h,
+            margin or 16,
+            min_w or 240,
+            min_h or 180
+        )
+        return cw, ch, using_saved
+    end
+
+    return math.floor(w + 0.5), math.floor(h + 0.5), using_saved
+end
+
+-- First size after open is the restored/default size and is not saved.
+-- A later change is a manual resize and should be persisted.
+function M.note_settings_resize(seen_w, seen_h, width, height)
+    width = tonumber(width)
+    height = tonumber(height)
+    if width == nil or height == nil then
+        return seen_w, seen_h, false
+    end
+    if seen_w == nil or seen_h == nil then
+        return width, height, false
+    end
+    if math.abs(width - seen_w) > 1 or math.abs(height - seen_h) > 1 then
+        return width, height, true
+    end
+    return seen_w, seen_h, false
+end
+
 -- True when saved size clearly exceeds the display (needs auto-fit).
 function M.needs_auto_fit(w, h, display_w, display_h, margin)
     margin = margin or 16

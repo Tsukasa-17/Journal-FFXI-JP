@@ -590,6 +590,7 @@ local function serialize_pins(list)
             kind = entry.kind,
             id = entry.id,
             name = entry.name,
+            area = entry.area,
             steps = serialize_steps(entry.steps),
             step = entry.step,
             auto = entry.auto == true or nil,
@@ -624,6 +625,7 @@ local function load_pins(saved)
                 kind = entry.kind,
                 id = tostring(entry.id),
                 name = tostring(entry.name),
+                area = type(entry.area) == 'string' and entry.area or nil,
                 steps = steps,
                 step = math.max(1, math.floor(tonumber(entry.step) or 1)),
                 auto = entry.auto == true or nil,
@@ -944,6 +946,25 @@ local function apply_config()
     pin_active = tonumber(config.pin_active) or 1
     pin_auto_zone = config.pin_auto_zone == true
     pin_scale = clamp_pin_scale(config.pin_scale)
+    M.pin_text_scale = require('font_choice').clamp_scale(
+        config.pin_text_scale, 0.50, 1.40, 1.0)
+    do
+        local function saved_px(value)
+            value = tonumber(value)
+            if value == nil or value ~= value or value <= 0
+                or value == math.huge or value > 10000 then
+                return nil
+            end
+            return math.floor(value + 0.5)
+        end
+        local sw = saved_px(config.settings_width)
+        local sh = saved_px(config.settings_height)
+        if sw ~= nil and sh ~= nil then
+            M.settings_w, M.settings_h = sw, sh
+        else
+            M.settings_w, M.settings_h = nil, nil
+        end
+    end
     pin_show_next = config.pin_show_next ~= false
     auto_pin_quests = config.auto_pin_quests == true
     guide_section = math.max(1, math.floor(tonumber(config.guide_section) or 1))
@@ -1002,6 +1023,9 @@ local function update_config_values()
     config.pin_active = pin_active
     config.pin_auto_zone = pin_auto_zone
     config.pin_scale = pin_scale
+    config.pin_text_scale = M.pin_text_scale or 1.0
+    config.settings_width = M.settings_w
+    config.settings_height = M.settings_h
     config.pin_show_next = pin_show_next
     config.auto_pin_quests = auto_pin_quests
     config.guide_section = guide_section
@@ -3298,7 +3322,7 @@ local function clamp_pin_active()
     pin_active = math.max(1, math.min(pin_active, math.max(#pins, 1)))
 end
 
-local function add_pin(kind, id, name, steps)
+local function add_pin(kind, id, name, steps, area)
     if find_pin(kind, id, name) ~= nil then
         return false
     end
@@ -3316,6 +3340,7 @@ local function add_pin(kind, id, name, steps)
         kind = kind,
         id = tostring(id or ''),
         name = tostring(name or ''),
+        area = type(area) == 'string' and area or nil,
         steps = serialize_steps(steps),
         step = 1,
     }
@@ -3379,6 +3404,7 @@ function M.GetPinState()
         active = pin_active,
         auto_zone = pin_auto_zone,
         scale = pin_scale,
+        text_scale = M.pin_text_scale or 1.0,
         show_next = pin_show_next,
         opacity = pin_opacity,
         background = pin_background,
@@ -3440,6 +3466,30 @@ end
 -- direction is +1 (bigger) or -1 (smaller)
 function M.AdjustPinScale(direction)
     return M.SetPinScale(pin_scale + direction * PIN_SCALE_STEP)
+end
+
+-- Tracker text size, 50% to 140%, separate from the Journal text size
+-- and from pin_scale. Saved values such as 79% are not rounded away.
+function M.GetPinTextScale()
+    return M.pin_text_scale or 1.0
+end
+
+function M.SetPinTextScale(value)
+    local scale = require('font_choice').clamp_scale(
+        value, 0.50, 1.40, M.pin_text_scale or 1.0)
+
+    if scale == M.pin_text_scale then
+        return scale
+    end
+
+    M.pin_text_scale = scale
+    request_config_save()
+
+    return scale
+end
+
+function M.AdjustPinTextScale(direction)
+    return M.SetPinTextScale((M.pin_text_scale or 1.0) + (tonumber(direction) or 0) * 0.05)
 end
 
 -- Font changes apply on reload; Journal text scale (0.5 to 1.4) applies immediately.
@@ -3537,6 +3587,32 @@ end
 -- Settings window.
 function M.GetSettingsOpen()
     return settings_open
+end
+
+-- Manual settings-window size in pixels. Nil means "use the default".
+function M.GetSettingsWindowSize()
+    return M.settings_w, M.settings_h
+end
+
+function M.SetSettingsWindowSize(width, height)
+    width = tonumber(width)
+    height = tonumber(height)
+    if width == nil or height == nil
+        or width ~= width or height ~= height
+        or width <= 0 or height <= 0
+        or width == math.huge or height == math.huge
+        or width > 10000 or height > 10000 then
+        return false
+    end
+    width = math.floor(width + 0.5)
+    height = math.floor(height + 0.5)
+    if width == M.settings_w and height == M.settings_h then
+        return false
+    end
+    M.settings_w = width
+    M.settings_h = height
+    request_config_save()
+    return true
 end
 
 function M.SetSettingsOpen(value)
@@ -3733,7 +3809,7 @@ function M.ToggleItemPin(kind, item)
         return remove_pin_at(index)
     end
 
-    if add_pin(kind, item.id, item.name, item.steps or {}) then
+    if add_pin(kind, item.id, item.name, item.steps or {}, item.area or item.category) then
         pin_visible = true
         pin_active = #pins
 
@@ -3760,7 +3836,7 @@ function M.PinSelected()
         return 0
     end
 
-    if add_pin(kind, item.id, item.name, item.steps or {}) then
+    if add_pin(kind, item.id, item.name, item.steps or {}, item.area or item.category) then
         pin_visible = true
         pin_active = #pins
 
@@ -4156,7 +4232,11 @@ do
     function S.entry(kind, group, label, item, position, order, language)
         local fields = {}
 
-        S.field(fields, 'name', item.name, nil, kind == 'quest' and item.id or nil)
+        S.field(fields, 'name', item.name, nil, {
+            kind = kind,
+            area = group,
+            id = item.id,
+        })
 
         if kind == 'quest' then
             S.field(fields, 'npc', item.npc)
@@ -6153,6 +6233,7 @@ local function detect_new_entries()
                     kind = entry.kind,
                     id = entry.id,
                     name = entry.name,
+                    area = entry.area,
                     steps = entry.steps,
                     done = true,
                 }
@@ -6824,7 +6905,11 @@ do
                         and M.world_lock.available(quest.id) then
 
                         seen[key] = true
-                        names[#names + 1] = i18n.step(quest.name, quest.id)
+                        names[#names + 1] = i18n.step(quest.name, {
+                            kind = 'quest',
+                            area = quest.tracker_area or quest.category,
+                            id = quest.id,
+                        })
                     end
                 end
 
@@ -6974,6 +7059,8 @@ local function reconcile_auto_pins()
                     kind = 'quest',
                     id = id,
                     name = tostring(quest.name or ''),
+                    area = type(quest.category) == 'string' and quest.category
+                        or quest.tracker_area,
                     steps = serialize_steps(quest.steps or {}),
                     step = 1,
                     auto = true,

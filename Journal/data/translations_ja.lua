@@ -2175,6 +2175,10 @@ return {
     ["The Path Untraveled"] = "第一の定め",
     ["At the Heavens' Door"] = "天地の間に",
     ["The Lion's Roar"] = "理外の獅子",
+    -- Same English title, two RoV log IDs. Do not add a global map.
+    -- wiki.ffo.jp 星唄ミッション: 第1章9 害毒の渦 / 第2章35 迷宮の渦
+    ["ctx:mission:rov:130:Eddies of Despair"] = "害毒の渦",
+    ["ctx:mission:rov:232:Eddies of Despair"] = "迷宮の渦",
     ["A Land After Time"] = "時のない世界",
     ["Fate's Call"] = "運命を奏でよ",
     ["What Lies Beyond"] = "後の先",
