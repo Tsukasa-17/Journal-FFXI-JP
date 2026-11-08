@@ -106,14 +106,120 @@ local function step_text(step)
     return i18n.step(tostring(step or ''))
 end
 
-local function short_name(name)
-    name = string.upper(tostring(name or ''))
+local function utf8_chars(text)
+    local chars = {}
+    local i = 1
+    local n = #text
 
-    if #name <= TAB_NAME_LENGTH then
+    while i <= n do
+        local b = text:byte(i)
+        local len = 1
+
+        if b >= 0xF0 then
+            len = 4
+        elseif b >= 0xE0 then
+            len = 3
+        elseif b >= 0xC0 then
+            len = 2
+        end
+
+        if i + len - 1 > n then
+            break
+        end
+
+        chars[#chars + 1] = text:sub(i, i + len - 1)
+        i = i + len
+    end
+
+    return chars
+end
+
+-- ASCII stays 1 column, the historical 12-column tab budget. Japanese
+-- glyphs are wider, so they take 2 and are never cut mid-character.
+local function columns_of(char)
+    if char:byte(1) < 0x80 then
+        return 1
+    end
+
+    return 2
+end
+
+local function display_name(entry)
+    return tostring(i18n.step(tostring(entry.name or ''), {
+        kind = entry.kind,
+        area = entry.area,
+        id = entry.id,
+    }))
+end
+
+local function short_name(name)
+    name = tostring(name or '')
+
+    if name:match('^[%z\1-\127]*$') ~= nil then
+        name = string.upper(name)
+    end
+
+    local chars = utf8_chars(name)
+    local total = 0
+
+    for _, char in ipairs(chars) do
+        total = total + columns_of(char)
+    end
+
+    if total <= TAB_NAME_LENGTH then
         return name
     end
 
-    return name:sub(1, TAB_NAME_LENGTH - 3) .. '...'
+    local budget = TAB_NAME_LENGTH - 3
+    local used = 0
+    local out = {}
+
+    for _, char in ipairs(chars) do
+        local width = columns_of(char)
+
+        if used + width > budget then
+            break
+        end
+
+        out[#out + 1] = char
+        used = used + width
+    end
+
+    return table.concat(out) .. '...'
+end
+
+-- The tab the selector draws. The ImGui id stays the pin index.
+function M.TabSpec(entry, index)
+    local full = display_name(entry or {})
+    local label = short_name(full)
+
+    return {
+        index = index,
+        label = label,
+        full = full,
+        id = label .. '##pin_tab_' .. tostring(index),
+    }
+end
+
+-- Font size is independent of the Journal. It multiplies the tracker size
+-- so the window width and the text stay in proportion (wrap unchanged).
+function M.LayoutScale(pin)
+    local size_scale = tonumber(pin and pin.scale) or 1.0
+    local text_scale = tonumber(pin and pin.text_scale) or 1.0
+
+    if text_scale ~= text_scale or text_scale <= 0 or text_scale == math.huge then
+        text_scale = 1.0
+    end
+
+    local scale = size_scale * text_scale
+
+    return {
+        scale = scale,
+        font = TEXT_SIZE * scale,
+        width = WINDOW_WIDTH * scale,
+        text_scale = text_scale,
+        size_scale = size_scale,
+    }
 end
 
 ---------------------------------------------------------- flush right
@@ -227,6 +333,30 @@ local function group_by_kind(pins)
     return groups
 end
 
+-- Missions first, then quests, each in the pinned order. Same as the tabs.
+function M.TabRow(pins)
+    local groups = group_by_kind(pins or {})
+    local row = {}
+
+    for _, kind in ipairs(kinds) do
+        local group = groups[kind]
+
+        if #group > 0 then
+            if #row > 0 then
+                row[#row + 1] = { separator = true }
+            end
+
+            for _, index in ipairs(group) do
+                local spec = M.TabSpec(pins[index], index)
+                spec.kind = pins[index].kind
+                row[#row + 1] = spec
+            end
+        end
+    end
+
+    return row
+end
+
 -- Draws one pinned item. Only the direction buttons are shown.
 -- One of the < and > buttons: small, in translucent gray.
 local function step_button(label)
@@ -281,7 +411,7 @@ local function draw_ghost(controller, position)
 
     right_text(
         colors.ghost,
-        string.upper(ghost.name),
+        string.upper(display_name(ghost)),
         ghost.repeatable == true and colors.ghost or nil
     )
 
@@ -319,7 +449,7 @@ local function draw_pin(controller, index, entry)
 
     right_text(
         colors[entry.kind] or colors.quest,
-        string.upper(tostring(i18n.step(entry.name or '', entry.id))),
+        string.upper(display_name(entry)),
         entry.repeatable == true and colors.repeatable or nil
     )
 
@@ -386,27 +516,8 @@ local function draw_stacked(controller, pins)
 end
 
 local function draw_tabs(controller, pins, active)
-    local groups = group_by_kind(pins)
-
     -- The row of tabs, with a bar between missions and quests.
-    local row = {}
-
-    for _, kind in ipairs(kinds) do
-        local group = groups[kind]
-
-        if #group > 0 then
-            if #row > 0 then
-                row[#row + 1] = { separator = true }
-            end
-
-            for _, index in ipairs(group) do
-                row[#row + 1] = {
-                    index = index,
-                    label = short_name(pins[index].name),
-                }
-            end
-        end
-    end
+    local row = M.TabRow(pins)
 
     local width = 0
 
@@ -440,6 +551,15 @@ local function draw_tabs(controller, pins, active)
 
             if imgui.SmallButton(item.label .. '##pin_tab_' .. item.index) then
                 controller.SetPinActive(item.index)
+            end
+
+            if item.full ~= nil
+                and item.full ~= item.label
+                and imgui.IsItemHovered
+                and imgui.IsItemHovered()
+                and imgui.SetTooltip then
+
+                imgui.SetTooltip(item.full)
             end
 
             if is_active then
@@ -481,6 +601,7 @@ local function apply_pending(controller, pins)
             kind = entry.kind,
             id = entry.id,
             name = entry.name,
+            area = entry.area,
             steps = entry.steps,
             repeatable = entry.repeatable,
             time = os.time(),
@@ -496,7 +617,12 @@ local function apply_pending(controller, pins)
 
         controller.ToggleItemPin(
             ghost.kind,
-            { id = ghost.id, name = ghost.name, steps = ghost.steps }
+            {
+                id = ghost.id,
+                name = ghost.name,
+                area = ghost.area,
+                steps = ghost.steps,
+            }
         )
     end
 end
@@ -572,13 +698,15 @@ function M.Draw(controller, can_draw)
         restore_window = false
     end
 
-    -- The size set from the Journal scales the text and the width.
-    local scale = tonumber(pin.scale) or 1.0
+    -- Tracker size and the tracker's own text scale. The Journal text
+    -- size is not read here. Width scales with the font so wrap holds.
+    local layout = M.LayoutScale(pin)
+    local scale = layout.scale
 
-    current_size = TEXT_SIZE * scale
+    current_size = layout.font
 
     -- Fixed width, height follows the content.
-    imgui.SetNextWindowSize({ WINDOW_WIDTH * scale, 0 })
+    imgui.SetNextWindowSize({ layout.width, 0 })
 
     -- Opacity of the text and the background set in the settings. The
     -- background is transparent by default, and there is no border.

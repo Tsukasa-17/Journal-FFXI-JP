@@ -23,6 +23,14 @@ local richtext = require('richtext')
 local icons = require('icons')
 local i18n = require('i18n')
 
+local function entry_name(entry)
+    return i18n.step(entry and entry.name or '', {
+        kind = entry and entry.kind,
+        area = entry and entry.area,
+        id = entry and entry.id,
+    })
+end
+
 local M = {}
 
 local tx = i18n.t
@@ -481,7 +489,7 @@ function M.Draw(controller, can_draw)
             centered_text(
                 regular, TEXT_SIZE * scale, colors.dim,
                 tx(entry.progress and 'In progress' or 'Not active yet')
-                    .. ' - ' .. tostring(i18n.step(entry.name or '', entry.id)),
+                    .. ' - ' .. tostring(entry_name(entry)),
                 width, alpha
             )
 
@@ -556,7 +564,7 @@ function M.Draw(controller, can_draw)
                 regular,
                 NAME_SIZE * scale,
                 colors.name,
-                fit_text(regular, NAME_SIZE * scale, tostring(i18n.step(entry.name or '', entry.id)), width - 40 * scale),
+                fit_text(regular, NAME_SIZE * scale, tostring(entry_name(entry)), width - 40 * scale),
                 width,
                 alpha
             )

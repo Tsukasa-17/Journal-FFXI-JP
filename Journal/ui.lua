@@ -2539,7 +2539,11 @@ local function draw_details_panel(
             imgui.TextColored(
                 colors.gold,
                 tostring(
-                    i18n.step(selected.name or '', selected.id)
+                    i18n.step(selected.name or '', {
+                        kind = kind == 'Mission' and 'mission' or 'quest',
+                        area = selected.area or selected.category,
+                        id = selected.id,
+                    })
                 )
             )
 
@@ -3686,7 +3690,11 @@ local function draw_journal_list(
             if item.code ~= nil then
                 return tostring(item.code)
                     .. '. '
-                    .. tostring(i18n.step(item.name or '', item.id))
+                    .. tostring(i18n.step(item.name or '', {
+                        kind = 'mission',
+                        area = item.area,
+                        id = item.id,
+                    }))
                     .. (item.finale and (' (' .. tx('Finale') .. ')') or '')
             end
 
@@ -3906,7 +3914,11 @@ local function draw_sheet_window()
 
             imgui.TextColored(
                 colors.gold,
-                tostring(i18n.step(selected.name or '', selected.id))
+                tostring(i18n.step(selected.name or '', {
+                    kind = kind == 'Mission' and 'mission' or 'quest',
+                    area = selected.area or selected.category,
+                    id = selected.id,
+                }))
             )
 
             imgui.Spacing()
@@ -4464,7 +4476,11 @@ local function draw_active_row(row, id, remove)
                 end
 
                 local name =
-                    fit_text(i18n.step(row.name, row.id), right_x - text_left - after)
+                    fit_text(i18n.step(row.name, {
+                        kind = row.kind,
+                        area = row.area,
+                        id = row.id,
+                    }), right_x - text_left - after)
 
                 draw:AddText(
                     { text_left, text_y },
@@ -5582,6 +5598,10 @@ end
 
 local settings_was_open = false
 local settings_restore = false
+-- Last size seen while the settings window was open. The first frame after
+-- a restore is only recorded, so the default is not stored as a user size.
+local settings_seen_w = nil
+local settings_seen_h = nil
 
 local function settings_percent(value)
     return string.format('%d%%', math.floor((value or 0) * 100 + 0.5))
@@ -5820,6 +5840,8 @@ local function draw_settings_window()
 
     if not wanted or not can_draw_ui() then
         settings_was_open = false
+        settings_seen_w = nil
+        settings_seen_h = nil
 
         return
     end
@@ -5831,17 +5853,50 @@ local function draw_settings_window()
 
     if settings_restore then
         settings_restore = false
+        settings_seen_w = nil
+        settings_seen_h = nil
 
         local journal =
             controller.GetJournalWindowState
             and controller.GetJournalWindowState()
 
-        imgui.SetNextWindowSize({ scaled(480), scaled(640) })
+        -- Only the opening frame chooses the size. A saved manual size is
+        -- restored; otherwise the font-scaled default is used. Later frames
+        -- do not call SetNextWindowSize, so text scale and screen-fit do not
+        -- put the default back over a size the user set.
+        local saved_w, saved_h = nil, nil
+        if controller.GetSettingsWindowSize then
+            saved_w, saved_h = controller.GetSettingsWindowSize()
+        end
+        local display_w, display_h = require('window_fit').get_display_size(imgui)
+        local open_w, open_h = require('window_fit').resolve_saved_size(
+            saved_w,
+            saved_h,
+            scaled(480),
+            scaled(640),
+            display_w,
+            display_h,
+            16,
+            240,
+            180
+        )
+        imgui.SetNextWindowSize({ open_w, open_h })
 
         imgui.SetNextWindowPos({
             ((journal and journal.visible and journal.x) or 40) + 100,
             ((journal and journal.visible and journal.y) or 40) + 100,
         })
+    end
+
+    do
+        local display_w, display_h = require('window_fit').get_display_size(imgui)
+        if display_w ~= nil and display_h ~= nil and imgui.SetNextWindowSizeConstraints then
+            pcall(
+                imgui.SetNextWindowSizeConstraints,
+                { 240, 180 },
+                { math.max(240, display_w - 16), math.max(180, display_h - 16) }
+            )
+        end
     end
 
     -- Always fully opaque, so it stays readable while the opacity changes.
@@ -5864,6 +5919,13 @@ local function draw_settings_window()
         local draw = imgui.GetWindowDrawList()
         local x, y = imgui.GetWindowPos()
         local width, height = imgui.GetWindowSize()
+
+        local seen_w, seen_h, resized = require('window_fit').note_settings_resize(
+            settings_seen_w, settings_seen_h, width, height)
+        settings_seen_w, settings_seen_h = seen_w, seen_h
+        if resized and controller.SetSettingsWindowSize then
+            controller.SetSettingsWindowSize(width, height)
+        end
 
         draw_window_panel(draw, x, y, width, height, true)
 
@@ -5992,6 +6054,20 @@ local function draw_settings_window()
                 end,
                 function()
                     controller.SetPinScale(1.0)
+                end
+            )
+        end
+
+        if controller.GetPinTextScale and controller.AdjustPinTextScale then
+            draw_settings_stepper(
+                'tracker_text_size',
+                tx('Text size'),
+                settings_percent(controller.GetPinTextScale()),
+                function(direction)
+                    controller.AdjustPinTextScale(direction)
+                end,
+                function()
+                    controller.SetPinTextScale(1.0)
                 end
             )
         end
