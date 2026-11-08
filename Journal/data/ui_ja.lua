@@ -39,6 +39,7 @@ return {
     ['Chapter %d: %s'] = '第%d章: %s',
     ['Finale'] = 'フィナーレ',
     ['Opens the quest'] = 'クエストを開く',
+    ['Opens the quest sheet'] = 'クエストの詳細を開く',
     ['Starter City Missions'] = '初期都市ミッション',
     ['Expansion Missions'] = '拡張ミッション',
     ['Scenario Missions'] = 'シナリオミッション',

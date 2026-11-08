@@ -183,6 +183,82 @@ local function open_sheet(kind)
     end
 end
 
+-- Sheet opened without the Journal, and the size the player last gave it.
+local sheetx = { standalone = false, w = nil, h = nil, kinds = {}, kinds_time = -1000 }
+
+sheetx.row_icon = function(row, status, mission)
+    if controller == nil or controller.worldmark == nil
+        or controller.worldmark.GetIcon == nil then
+        return nil
+    end
+
+    local marks = controller.worldmark
+
+    if mission then
+        if row == nil or row.id == nil then
+            return nil
+        end
+
+        if status == 'completed' then
+            return marks.GetIcon('mission_completed')
+        end
+
+        if status == 'not_started' and row.area ~= nil
+            and controller.IsMissionLocked
+            and controller.IsMissionLocked(row.area, row.id) then
+
+            return marks.GetIcon('mission_locked')
+        end
+
+        if status == 'active' or status == 'not_started' then
+            return marks.GetIcon('mission_available')
+        end
+
+        return nil
+    end
+
+    if row == nil or row.id == nil
+        or (status ~= 'active' and status ~= 'not_started'
+            and status ~= 'completed') then
+
+        return nil
+    end
+
+    local kind = 'progress'
+
+    if status == 'completed' then
+        kind = row.repeatable == true and 'repeatable' or 'completed'
+    elseif status ~= 'active' then
+        local now = os.clock()
+
+        if now - sheetx.kinds_time > 1 then
+            sheetx.kinds = {}
+            sheetx.kinds_time = now
+        end
+
+        kind = sheetx.kinds[row.id]
+
+        if kind == nil then
+            kind = controller.GetQuestIconKind
+                and controller.GetQuestIconKind(row.id) or nil
+            kind = kind == 'locked' and 'locked' or 'available'
+            sheetx.kinds[row.id] = kind
+        end
+    end
+
+    return marks.GetIcon(kind)
+end
+
+logic.sheet_hook = function()
+    local journal = logic.GetJournalWindowState and logic.GetJournalWindowState()
+
+    if not sheet_open then
+        sheetx.standalone = not (journal and journal.visible)
+    end
+
+    open_sheet('Quest')
+end
+
 local function toggle_progress()
     progress_open = not progress_open
 
@@ -1065,7 +1141,8 @@ local function draw_selector_item(
     dot_color,
     repeatable,
     id_suffix,
-    favorite
+    favorite,
+    icon
 )
     imgui.PushStyleColor(
         ImGuiCol_Text,
@@ -1128,30 +1205,56 @@ local function draw_selector_item(
         )
     end
 
-    draw:AddCircleFilled(
-        {
-            min_x + 19,
-            min_y + height * 0.5,
-        },
-        6.1,
-        imgui.GetColorU32(
-            dot_color
-                or colors.selector_dot
-        ),
-        14
-    )
+    local icon_drawn = false
 
-    draw:AddCircleFilled(
-        {
-            min_x + 17.4,
-            min_y + height * 0.5 - 1.6,
-        },
-        1.9,
-        imgui.GetColorU32(
-            colors.selector_dot_highlight
-        ),
-        10
-    )
+    if icon ~= nil then
+        icon_drawn = pcall(function()
+            local icon_h = math.min(height - 2, 24)
+            local icon_w = icon_h * icon.width / icon.height
+            local center_y = min_y + height * 0.5
+
+            if icon_w > 21 then
+                icon_h = icon_h * 21 / icon_w
+                icon_w = 21
+            end
+
+            draw:AddImage(
+                icon.id,
+                { min_x + 19 - icon_w * 0.5, center_y - icon_h * 0.5 },
+                { min_x + 19 + icon_w * 0.5, center_y + icon_h * 0.5 },
+                { 0, 0 },
+                { 1, 1 },
+                imgui.GetColorU32({ 1, 1, 1, 1 })
+            )
+        end)
+    end
+
+    if not icon_drawn then
+        draw:AddCircleFilled(
+            {
+                min_x + 19,
+                min_y + height * 0.5,
+            },
+            6.1,
+            imgui.GetColorU32(
+                dot_color
+                    or colors.selector_dot
+            ),
+            14
+        )
+
+        draw:AddCircleFilled(
+            {
+                min_x + 17.4,
+                min_y + height * 0.5 - 1.6,
+            },
+            1.9,
+            imgui.GetColorU32(
+                colors.selector_dot_highlight
+            ),
+            10
+        )
+    end
 
     local text_x =
         min_x + 32
@@ -1710,7 +1813,9 @@ local function draw_selectable_status_list(
                                     false,
                                     status_dot_color(display_status(row)),
                                     row.repeatable == true,
-                                    block.area .. '_' .. tostring(row.id)
+                                    block.area .. '_' .. tostring(row.id),
+                                    nil,
+                                    sheetx.row_icon(row, display_status(row))
                                 )
 
                             if row_clicked and controller.JumpToQuest then
@@ -1752,7 +1857,8 @@ local function draw_selectable_status_list(
                         item.repeatable == true,
                         nil,
                         favorite_getter ~= nil
-                            and favorite_getter(item) == true
+                            and favorite_getter(item) == true,
+                        sheetx.row_icon(item, status, is_mission_list)
                     )
 
                 -- One click selects the row; a double click opens its
@@ -3805,9 +3911,9 @@ local function draw_sheet_window()
     local journal =
         controller.GetJournalWindowState()
 
-    -- The sheet goes away with the Journal.
+    -- The sheet goes away with the Journal, unless it was opened without it.
     if not journal
-        or not journal.visible then
+        or (not journal.visible and not sheetx.standalone) then
 
         sheet_open = false
 
@@ -3817,15 +3923,35 @@ local function draw_sheet_window()
     if sheet_restore then
         sheet_restore = false
 
-        imgui.SetNextWindowSize({
-            scaled(520),
-            scaled(660),
-        })
+        local sheet_w = sheetx.w or scaled(520)
+        local sheet_h = sheetx.h or scaled(660)
 
-        imgui.SetNextWindowPos({
-            (journal.x or 0) + 60,
-            (journal.y or 0) + 60,
-        })
+        imgui.SetNextWindowSize({ sheet_w, sheet_h })
+
+        local pos_x = (journal.x or 0) + 60
+        local pos_y = (journal.y or 0) + 60
+
+        if not journal.visible then
+            local ok, screen_w, screen_h = pcall(function()
+                local size = imgui.GetIO().DisplaySize
+
+                return size.x, size.y
+            end)
+
+            if ok and screen_w and screen_h then
+                pos_x = math.max(20, (screen_w - sheet_w) * 0.5)
+                pos_y = math.max(20, (screen_h - sheet_h) * 0.4)
+            end
+        end
+
+        imgui.SetNextWindowPos({ pos_x, pos_y })
+    end
+
+    if imgui.SetNextWindowSizeConstraints then
+        imgui.SetNextWindowSizeConstraints(
+            { scaled(300), scaled(200) },
+            { scaled(1400), scaled(1400) }
+        )
     end
 
     local kind = sheet_kind
@@ -3867,6 +3993,8 @@ local function draw_sheet_window()
 
         local width, height =
             imgui.GetWindowSize()
+
+        sheetx.w, sheetx.h = width, height
 
         draw_window_panel(
             draw,
@@ -5289,7 +5417,26 @@ do
                     imgui.Separator()
                 end
 
-                for index, row in ipairs(npc_rows) do
+                local order = {}
+
+                for position = 1, #npc_rows do
+                    order[position] = position
+                end
+
+                table.sort(order, function(a, b)
+                    local da = tonumber(npc_rows[a].distance) or math.huge
+                    local db = tonumber(npc_rows[b].distance) or math.huge
+
+                    if da ~= db then
+                        return da < db
+                    end
+
+                    return a < b
+                end)
+
+                for _, index in ipairs(order) do
+                    local row = npc_rows[index]
+
                     shadow_text(
                         richtext.COLORS.npc,
                         fit_text(i18n.step(row.name, row.id), available - cscaled(24))
@@ -5353,9 +5500,41 @@ do
                             break
                         end
 
+                        local icon_kind = quest.repeatable and 'repeatable'
+                            or (quest.active and 'progress' or 'available')
+                        local quest_icon = controller.worldmark
+                            and controller.worldmark.GetIcon
+                            and controller.worldmark.GetIcon(icon_kind)
+
+                        if quest_icon ~= nil and imgui.Dummy and imgui.SameLine then
+                            local icon_height = imgui.GetTextLineHeight()
+                            local icon_width = icon_height * quest_icon.width / quest_icon.height
+
+                            if pcall(imgui.Dummy, { icon_width, icon_height }) then
+                                pcall(function()
+                                    local min_x, min_y = imgui.GetItemRectMin()
+                                    local max_x, max_y = imgui.GetItemRectMax()
+
+                                    imgui.GetWindowDrawList():AddImage(
+                                        quest_icon.id,
+                                        { min_x, min_y },
+                                        { max_x, max_y },
+                                        { 0, 0 },
+                                        { 1, 1 },
+                                        imgui.GetColorU32({ 1, 1, 1, 1 })
+                                    )
+                                end)
+
+                                imgui.SameLine(0, 4)
+                            end
+                        end
+
                         shadow_text(
                             quest.active and { 0.55, 0.95, 0.55, 1.00 } or colors.text,
-                            fit_text(quest.name, available)
+                            fit_text(i18n.step(quest.name, {
+                                kind = 'quest',
+                                id = quest.id,
+                            }), available)
                         )
 
                         -- A shaded box and a line under the text, brighter
@@ -5396,7 +5575,7 @@ do
                             if imgui.IsItemClicked()
                                 and controller.OpenQuestFromCompass then
 
-                                controller.OpenQuestFromCompass(quest.id)
+                                controller.OpenQuestSheet(quest.id)
                             end
                         end
                     end
@@ -7085,7 +7264,8 @@ local function draw_search_results(width)
                             and controller.IsFavorite(
                                 kind == 'mission' and 'Mission' or 'Quest',
                                 row
-                            ) == true
+                            ) == true,
+                        sheetx.row_icon(row, status, kind == 'mission')
                     )
 
                     -- A double click opens the sheet, as in the lists.

@@ -244,17 +244,45 @@ end
 
 -- One line of text flush right, with a shadow. With icon_color, an infinity
 -- sign follows the text (the repeatable quests).
-local function right_text(color, text, icon_color)
+local function right_text(color, text, icon_color, lead)
     local line_height = imgui.GetTextLineHeight()
     local icon_width, icon_height = 0, 0
     local icon_gap = 0
+    local lead_width = 0
 
     if icon_color ~= nil then
         icon_width, icon_height = icons.infinity_size(line_height)
         icon_gap = 8
     end
 
-    align_right(text_width(text) + icon_gap + icon_width)
+    if lead ~= nil and lead.width and lead.height and imgui.Dummy and imgui.SameLine then
+        lead_width = line_height * lead.width / lead.height
+    end
+
+    align_right(
+        text_width(text) + icon_gap + icon_width
+            + (lead_width > 0 and lead_width + 4 or 0)
+    )
+
+    if lead_width > 0 then
+        if pcall(imgui.Dummy, { lead_width, line_height }) then
+            pcall(function()
+                local min_x, min_y = imgui.GetItemRectMin()
+                local max_x, max_y = imgui.GetItemRectMax()
+
+                imgui.GetWindowDrawList():AddImage(
+                    lead.id,
+                    { min_x, min_y },
+                    { max_x, max_y },
+                    { 0, 0 },
+                    { 1, 1 },
+                    imgui.GetColorU32({ 1, 1, 1, 1 })
+                )
+            end)
+
+            imgui.SameLine(0, 4)
+        end
+    end
 
     -- The line is reserved with invisible text and then drawn twice, the
     -- first time as the shadow.
@@ -447,11 +475,46 @@ local function draw_pin(controller, index, entry)
     local total = #steps
     local step = math.max(1, math.min(entry.step or 1, math.max(total, 1)))
 
+    local lead = nil
+
+    if entry.id ~= nil
+        and controller.worldmark ~= nil
+        and controller.worldmark.GetIcon ~= nil then
+
+        local kind = nil
+
+        if entry.kind == 'quest' and controller.GetQuestIconKind ~= nil then
+            kind = controller.GetQuestIconKind(entry.id)
+        elseif entry.kind == 'mission'
+            and controller.GetMissionIconKind ~= nil then
+
+            kind = controller.GetMissionIconKind(entry.id, entry.name)
+        end
+
+        lead = kind ~= nil and controller.worldmark.GetIcon(kind) or nil
+    end
+
     right_text(
         colors[entry.kind] or colors.quest,
         string.upper(display_name(entry)),
-        entry.repeatable == true and colors.repeatable or nil
+        entry.repeatable == true and colors.repeatable or nil,
+        lead
     )
+
+    if entry.kind == 'quest'
+        and entry.id ~= nil
+        and controller.OpenQuestSheet ~= nil
+        and imgui.IsItemHovered
+        and imgui.IsItemHovered() then
+
+        if imgui.SetTooltip then
+            imgui.SetTooltip(i18n.t('Opens the quest sheet'))
+        end
+
+        if imgui.IsItemClicked and imgui.IsItemClicked() then
+            controller.OpenQuestSheet(entry.id)
+        end
+    end
 
     if total == 0 then
         right_text(colors.next, i18n.t('No steps available.'))

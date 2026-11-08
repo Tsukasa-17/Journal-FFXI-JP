@@ -644,6 +644,131 @@ local function read_viewport()
     return view
 end
 
+-- Custom icons ------------------------------------------------------------------
+--
+-- The player can put PNG files (transparent background) in assets/arrows/ to
+-- replace the arrows over the NPC:
+--   available.png  a quest that can be started, or the target of the compass
+--   locked.png     the quests of the NPC wait for another quest
+--   progress.png   a quest in progress
+-- A file that is not there (or cannot be loaded) leaves the arrow that is
+-- drawn with triangles. The files are looked for once, when the addon loads.
+
+local ICON_FILES = {
+    available = 'available.png',
+    locked = 'locked.png',
+    progress = 'progress.png',
+    repeatable = 'repeatable.png',
+    completed = 'completed.png',
+    mission_completed = 'mission_completed.png',
+    mission_locked = 'mission_locked.png',
+    mission_available = 'mission_available.png',
+}
+
+local icons = {}
+
+-- The texture of an icon: { id =, width =, height =, ptr = }, or nil.
+local function load_icon(name)
+    local cached = icons[name]
+
+    if cached ~= nil then
+        return cached ~= false and cached or nil
+    end
+
+    icons[name] = false
+
+    local file = ICON_FILES[name]
+
+    if file == nil then
+        return nil
+    end
+
+    local ok, texture = pcall(function()
+        local ffi = require('ffi')
+        local d3d = require('d3d8')
+        local path = tostring(addon and addon.path or '') .. '/assets/arrows/' .. file
+
+        if not ashita.fs.exists(path) then
+            return nil
+        end
+
+        local info = ffi.new('D3DXIMAGE_INFO')
+
+        if ffi.C.D3DXGetImageInfoFromFileA(path, info) ~= ffi.C.S_OK then
+            return nil
+        end
+
+        local pointer = ffi.new('IDirect3DTexture8*[1]')
+
+        if ffi.C.D3DXCreateTextureFromFileA(
+            d3d.get_device(), path, pointer
+        ) ~= ffi.C.S_OK then
+
+            return nil
+        end
+
+        local owned = d3d.gc_safe_release(
+            ffi.cast('IDirect3DTexture8*', pointer[0])
+        )
+
+        return {
+            ptr = owned,
+            id = tonumber(ffi.cast('uint32_t', owned)),
+            width = tonumber(info.Width),
+            height = tonumber(info.Height),
+        }
+    end)
+
+    if ok and texture ~= nil and texture.id ~= nil
+        and (texture.width or 0) > 0 and (texture.height or 0) > 0 then
+
+        icons[name] = texture
+
+        return texture
+    end
+
+    return nil
+end
+
+-- The texture of an icon (available, locked, progress, repeatable), or nil;
+-- for the compass window.
+function M.GetIcon(name)
+    return load_icon(name)
+end
+
+-- The PNG name for a kind, or nil. Does not load the picture.
+function M.IconFile(name)
+    return ICON_FILES[name]
+end
+
+-- For the tests: forget the icons that were looked for.
+function M.ResetIcons()
+    icons = {}
+end
+
+-- Draws an icon with its bottom at the point (sx, sy), with a short bob.
+-- Returns true when it was drawn.
+function M.DrawIcon(imgui, list, texture, sx, sy, depth, color, time, scale)
+    local size = math.max(9, math.min(24, 190 / math.max(depth, 1) + 8))
+        * (scale or 1) * 3.38
+    local height = size
+    local width = size * texture.width / texture.height
+    local bob = math.sin(time * 4.0) * size * 0.10
+    -- Lowered by a share of its own height so it sits closer to the head.
+    local bottom = sy + bob + size * 0.75
+
+    list:AddImage(
+        texture.id,
+        { sx - width * 0.5, bottom - height },
+        { sx + width * 0.5, bottom },
+        { 0, 0 },
+        { 1, 1 },
+        imgui.GetColorU32({ 1, 1, 1, color[4] or 1 })
+    )
+
+    return true
+end
+
 -- A down arrow with a short bob. tip is the point it points at.
 function M.DrawArrow(imgui, list, sx, sy, depth, color, time, scale)
     local size = math.max(9, math.min(24, 190 / math.max(depth, 1) + 8))
@@ -876,6 +1001,8 @@ function M.Draw(controller, can_draw)
             paint = grey
         elseif target.state == 'active' then
             paint = green
+        elseif target.state == 'repeatable' then
+            paint = { 0.62, 0.85, 1.00, 1.00 }
         end
 
         local color = main and paint
@@ -889,11 +1016,27 @@ function M.Draw(controller, can_draw)
             info.drawn = info.drawn + 1
             -- A quest in progress: a circular arrow turning; the others: a
             -- down arrow.
-            local draw = target.state == 'active' and M.DrawSpinner
-                or M.DrawArrow
+            local kind = target.locked and 'locked'
+                or (target.state == 'active' and 'progress'
+                    or (target.state == 'repeatable' and 'repeatable'
+                        or 'available'))
+            local icon = load_icon(kind)
+            local drawn = false
 
-            pcall(draw, imgui, list, point.x, point.y, point.depth,
-                color, time, scale)
+            -- A custom icon, when there is one; if drawing it fails, the
+            -- arrow of triangles.
+            if icon ~= nil then
+                drawn = pcall(M.DrawIcon, imgui, list, icon, point.x, point.y,
+                    point.depth, color, time, scale)
+            end
+
+            if not drawn then
+                local draw = kind == 'progress' and M.DrawSpinner
+                    or M.DrawArrow
+
+                pcall(draw, imgui, list, point.x, point.y, point.depth,
+                    color, time, scale)
+            end
         else
             if main then
                 info.reason = reason

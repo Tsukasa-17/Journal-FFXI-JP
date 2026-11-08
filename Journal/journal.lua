@@ -1,6 +1,6 @@
 addon.name    = 'Journal'
 addon.author  = 'Kxteel'
-addon.version = '0.3.0'
+addon.version = '0.3.4'
 addon.desc    = 'Journal for FFXI'
 
 --[[

@@ -210,18 +210,18 @@ check('invalid load keeps journal scale', math.abs(logic.GetTextScale() - 0.9) <
 check('invalid load keeps position fields', logic.GetJournalWindowState().x == 12)
 
 local credit = require('jp_credit')
-check('jp credit 0.2.0', credit.version == '0.2.0' and credit.display('0.3.0'):find('0.3.0', 1, true) ~= nil)
+check('jp credit 0.2.1', credit.version == '0.2.1' and credit.display('0.3.4'):find('0.3.4', 1, true) ~= nil)
 local journal_src = io.open('/workspace/Journal/journal.lua'):read('*a')
-check('addon version 0.3.0', journal_src:find("addon.version = '0.3.0'", 1, true) ~= nil)
+check('addon version 0.3.4', journal_src:find("addon.version = '0.3.4'", 1, true) ~= nil)
 check('addon author kxteel', journal_src:find("addon.author  = 'Kxteel'", 1, true) ~= nil)
 local logic_src = io.open('/workspace/Journal/logic.lua'):read('*a')
 check('no new compass setting', logic_src:find('prox_compass_open', 1, true) == nil)
 check('compass auto open remains', logic_src:find('M.SetCompassOpen(true)', 1, true) ~= nil)
 local readme = io.open('/workspace/Journal/README.md'):read('*a')
-check('readme test candidate', readme:find('試験候補', 1, true) ~= nil)
-check('readme keeps 0.1.0 release', readme:find('jp-v0.1.0', 1, true) ~= nil)
-check('readme no 0.2.0 release url', readme:find('releases/download/jp-v0.2.0', 1, true) == nil)
-check('readme names settings keys', readme:find('settings_width', 1, true) ~= nil and readme:find('pin_text_scale', 1, true) ~= nil)
+check('readme image', readme:find('assets/journal_icon.png', 1, true) ~= nil)
+check('readme no download', readme:find('releases/download', 1, true) == nil)
+check('readme no full branding', readme:find('完全版', 1, true) == nil)
+check('readme install kept', readme:find('古い Journal フォルダだけ', 1, true) ~= nil)
 
 local function count_keys(path)
     local n = 0
@@ -231,7 +231,13 @@ local function count_keys(path)
     return n
 end
 check('translation keys 7692', count_keys('/workspace/Journal/data/translations_ja.lua') == 7692)
-check('ui keys 361', count_keys('/workspace/Journal/data/ui_ja.lua') == 361)
+check('ui keys 362', count_keys('/workspace/Journal/data/ui_ja.lua') == 362)
+check('prox range', logic.prox_range.radius == 30 and logic.prox_range.keep == 35)
+local worldmark = require('worldmark')
+check('arrow file map', worldmark.IconFile('available') == 'available.png' and worldmark.IconFile('missing') == nil)
+check('icon fallback', worldmark.GetIcon('available') == nil)
+check('sheet opener', type(logic.OpenQuestSheet) == 'function')
+check('repeatable state', logic.GetNpcMarkState('nobody') == 'normal' or logic.GetNpcMarkState('nobody') == 'hidden')
 
 if fails > 0 then
     io.write('FAILED ', fails, '\n')

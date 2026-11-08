@@ -1,4 +1,7 @@
 # GPL source provenance
+
+2026-11-08: 上流 Journal 0.3.4 は、利用者が渡したアーカイブの内容を取り込む。そのアーカイブの Journal/LICENSE は Kxteel 氏の MIT で、改変と再配布を認め、著作権表示を残す条件です。Nexus の公開欄とは文面が違うため、ここでは ZIP に入っている許諾に従う。作者から別の同意を得たとは書きません。座標データは従来どおり LandSandBoat の GPLv3 です。未使用の calibri.ttf と desktop.ini は取り込んでいません。
+
 - data/npc_positions.lua: LandSandBoat data/zones/*/npcs.yamlから、data/npcs.luaにある名前の位置を抽出したと元ヘッダが明記。
 - data/zone_links.lua: data/zones/*/zone.yamlのzonelines由来。徒歩リンクで船/飛空艇等を除外したと元ヘッダが明記。
 - 2ファイルとも元ヘッダ/完全な編集可能Luaソースをそのまま保持。日本語版でこの2テーブル自体は変更していません。
