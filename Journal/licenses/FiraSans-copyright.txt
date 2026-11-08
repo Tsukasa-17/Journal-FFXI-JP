@@ -1,0 +1,2 @@
+Embedded font notice: Digitized data copyright 2012-2016, The Mozilla Foundation and Telefonica S.A.
+The supplied OFL notice also credits2012-2015; both retained.

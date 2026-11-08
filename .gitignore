@@ -1,0 +1,13 @@
+# Never publish local configuration, history or generated files
+.git/
+config/
+cache/
+.cache/
+__pycache__/
+*.log
+*.bak
+*.tmp
+.env
+.env.*
+*.key
+*.pem
