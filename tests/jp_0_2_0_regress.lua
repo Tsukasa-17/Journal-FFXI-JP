@@ -127,6 +127,7 @@ local config = {
     journal_height = 700,
     journal_x = 30,
     journal_y = 40,
+    journal_quest_category = 8,
 }
 local handler
 package.preload['settings'] = function()
@@ -139,6 +140,10 @@ end
 ashita = { events = { register = function() end } }
 local logic = require('logic')
 logic.Initialize()
+local quest_tabs = logic.GetQuestCategories()
+check('catseye tab last', quest_tabs[#quest_tabs] == 'catseye' and quest_tabs[#quest_tabs - 1] == 'crystal_war' and quest_tabs[1] == 'all')
+check('catseye label', logic.GetQuestCategoryNames().catseye == 'CatsEye')
+check('saved category stays crystal war', logic.GetQuestSelection().category_index == 9 and quest_tabs[9] == 'crystal_war')
 check('pin text default', math.abs(logic.GetPinTextScale() - 1) < 0.0001)
 check('journal scale kept', math.abs(logic.GetTextScale() - 0.79) < 0.0001)
 check('pin scale kept', math.abs(logic.GetPinScale() - 1.5) < 0.0001)
@@ -210,7 +215,7 @@ check('invalid load keeps journal scale', math.abs(logic.GetTextScale() - 0.9) <
 check('invalid load keeps position fields', logic.GetJournalWindowState().x == 12)
 
 local credit = require('jp_credit')
-check('jp credit 0.2.1', credit.version == '0.2.1' and credit.display('0.3.4'):find('0.3.4', 1, true) ~= nil)
+check('jp credit 0.3.0', credit.version == '0.3.0' and credit.display('0.3.4'):find('0.3.4', 1, true) ~= nil)
 local journal_src = io.open('/workspace/Journal/journal.lua'):read('*a')
 check('addon version 0.3.4', journal_src:find("addon.version = '0.3.4'", 1, true) ~= nil)
 check('addon author kxteel', journal_src:find("addon.author  = 'Kxteel'", 1, true) ~= nil)
@@ -231,13 +236,103 @@ local function count_keys(path)
     return n
 end
 check('translation keys 7692', count_keys('/workspace/Journal/data/translations_ja.lua') == 7692)
-check('ui keys 362', count_keys('/workspace/Journal/data/ui_ja.lua') == 362)
+check('ui keys 363', count_keys('/workspace/Journal/data/ui_ja.lua') == 363)
 check('prox range', logic.prox_range.radius == 30 and logic.prox_range.keep == 35)
 local worldmark = require('worldmark')
 check('arrow file map', worldmark.IconFile('available') == 'available.png' and worldmark.IconFile('missing') == nil)
 check('icon fallback', worldmark.GetIcon('available') == nil)
 check('sheet opener', type(logic.OpenQuestSheet) == 'function')
 check('repeatable state', logic.GetNpcMarkState('nobody') == 'normal' or logic.GetNpcMarkState('nobody') == 'hidden')
+
+local quest_data = require('data.quests')
+local counts = quest_data.GetCategoryCounts()
+check('old categories remain',
+    counts.sandoria > 0 and counts.bastok > 0 and counts.windurst > 0
+    and counts.jeuno > 0 and counts.outlands > 0 and counts.other > 0
+    and counts.whitegate > 0 and counts.crystal_war > 0)
+check('catseye one quest', counts.catseye == 1)
+local hakken = quest_data.QUESTS.catseye[1]
+check('hakken english title', hakken.name == 'Horutoto Hakken' and i18n.step('Horutoto Hakken') == 'Horutoto Hakken')
+check('hakken untracked', hakken.trackable == false and hakken.tracker_id == nil and hakken.tracker_area == nil)
+check('hakken japanese step', hakken.steps[1] == '東サルタバルタ (J-7) から内ホルトト遺跡に入る。')
+check('hakken ten steps', #hakken.steps == 10)
+local positions = require('data.npc_positions')
+check('no invented npc position', positions['Gan-Ban'] == nil and positions['Renovio'] == nil)
+local tracker = require('tracker')
+local listed = tracker.GetQuestArea('catseye')
+check('hakken in list', #listed == 1 and listed[1].name == 'Horutoto Hakken' and listed[1].status == 'not_started')
+check('sandoria list remains', #tracker.GetQuestArea('sandoria') > 10)
+local order = tracker.GetQuestCategories()
+check('category order', order[8] == 'crystal_war' and order[9] == 'catseye' and #order == 9)
+
+local function blank_packet(length)
+    return string.rep('\0', length)
+end
+local function set_byte(packet, offset, value)
+    return packet:sub(1, offset) .. string.char(value) .. packet:sub(offset + 2)
+end
+local function packet_056(packet_type, bits)
+    local packet = blank_packet(0x28)
+    local b1 = packet_type % 256
+    local b2 = math.floor(packet_type / 256) % 256
+    packet = set_byte(packet, 0x24, b1)
+    packet = set_byte(packet, 0x25, b2)
+    for _, bit in ipairs(bits) do
+        local offset = 0x04 + math.floor(bit / 8)
+        local mask = 2 ^ (bit % 8)
+        local current = packet:byte(offset + 1)
+        packet = set_byte(packet, offset, current + mask)
+    end
+    return packet
+end
+local function packet_055(table_index, get_bits, look_bits)
+    local packet = blank_packet(0x88)
+    packet = set_byte(packet, 0x84, table_index)
+    for _, bit in ipairs(get_bits) do
+        local offset = 0x04 + math.floor(bit / 8)
+        packet = set_byte(packet, offset, packet:byte(offset + 1) + (2 ^ (bit % 8)))
+    end
+    for _, bit in ipairs(look_bits) do
+        local offset = 0x44 + math.floor(bit / 8)
+        packet = set_byte(packet, offset, packet:byte(offset + 1) + (2 ^ (bit % 8)))
+    end
+    return packet
+end
+
+local dump = require('questdump')
+dump.reset()
+check('dump starts off', dump.is_enabled() == false)
+check('dump ignores while off', dump.ingest(0x056, packet_056(0x0070, { 4 })) == false)
+dump.set_enabled(true)
+check('dump stores unknown log', dump.ingest(0x056, packet_056(0x01AB, { 3 })) == true)
+dump.snapshot('before')
+check('dump stores unknown log change', dump.ingest(0x056, packet_056(0x01AB, { 3, 7 })) == true)
+check('dump stores known log', dump.ingest(0x056, packet_056(0x0070, { 12 })) == true)
+check('dump stores key item', dump.ingest(0x055, packet_055(3, { 5 }, { 9 })) == true)
+dump.snapshot('after')
+local result = dump.changes('before', 'after')
+local joined = table.concat(result.lines, '\n')
+check('dump shows log bit', joined:find('0x056 種別 0x000001AB ビット 7: オフ → オン', 1, true) ~= nil)
+check('dump shows quest bit', joined:find('0x056 種別 0x00000070 ビット 12: オフ → オン', 1, true) ~= nil)
+check('dump shows key item', joined:find('0x055 テーブル 3 入手ビット 5: オフ → オン', 1, true) ~= nil)
+check('dump shows seen key item', joined:find('0x055 テーブル 3 確認ビット 9: オフ → オン', 1, true) ~= nil)
+check('dump needs two snaps', dump.changes('missing', 'after') == nil)
+local saved_addon = addon
+addon = { path = '/tmp/ashita-root/addons/Journal/', name = 'Journal' }
+check('dump config outside addon', dump.config_dir() == '/tmp/ashita-root/config/addons/Journal')
+local report_dir = '/tmp/journal-questdump-test'
+os.execute('mkdir -p ' .. report_dir)
+os.remove(report_dir .. '/questdump.txt')
+local written = dump.write_report(report_dir, 'テスト\n')
+check('dump writes report', written == report_dir .. '/questdump.txt')
+local report = io.open(written, 'r')
+local report_text = report:read('*a')
+report:close()
+check('dump report text', report_text:find('テスト', 1, true) ~= nil)
+os.remove(written)
+addon = saved_addon
+dump.reset()
+check('dump off again', dump.is_enabled() == false)
 
 if fails > 0 then
     io.write('FAILED ', fails, '\n')

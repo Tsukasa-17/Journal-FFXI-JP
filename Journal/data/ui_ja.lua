@@ -153,6 +153,7 @@ return {
     ['/journal - Open Mission Journal'] = '/journal - ミッション Journal を開く',
     ['/journal help - Show help'] = '/journal help - ヘルプを表示',
     ['/journal quest - Open Quest Journal'] = '/journal quest - クエスト Journal を開く',
+    ['/journal questdump [on|off|snap|diff] - Record quest log bits (off by default)'] = '/journal questdump [on|off|snap|diff] - クエストログのビットを記録（普段はオフ）',
     ['/journal pin - Toggle pinned tracker'] = '/journal pin - ピン留めトラッカーの表示切替',
     ['/journal pin add - Pin the item selected in the Journal'] = '/journal pin add - 選択中の項目をピン留め',
     ['[Journal] Pinned %d item(s) from the Journal.'] = '[Journal] Journal から %d 件ピン留めしました。',

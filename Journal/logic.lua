@@ -6039,6 +6039,7 @@ function M.HandleCommand(e)
         require('encoding').chat_print(i18n.t('/journal mark [on|off|debug] - Arrow over the NPC of the compass in the game (prototype)'))
         require('encoding').chat_print(i18n.t('/journal alert [quest|mission] [done] - Preview the alerts'))
         require('encoding').chat_print(i18n.t('/journal quest - Open Quest Journal'))
+        require('encoding').chat_print(i18n.t('/journal questdump [on|off|snap|diff] - Record quest log bits (off by default)'))
         require('encoding').chat_print(i18n.t('/journal pin - Toggle pinned tracker'))
         require('encoding').chat_print(i18n.t('/journal pin add - Pin the item selected in the Journal'))
         require('encoding').chat_print(i18n.t('/journal pin remove <n> | clear - Unpin items'))
@@ -6239,6 +6240,11 @@ function M.HandleCommand(e)
             require('encoding').chat_print(i18n.t('[Journal] Usage: /journal pin [add|remove <n>|clear|mode|size|next|prev|reset|zone|auto|preview|<n>]'))
         end
 
+        return
+    end
+
+    if command == 'questdump' or command == 'questlog' then
+        require('questdump').handle(args)
         return
     end
 
@@ -7280,6 +7286,7 @@ end
 
 function M.Initialize()
     tracker.Initialize()
+    require('questdump').install()
     apply_config()
     validate_state()
 end

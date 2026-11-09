@@ -1,4 +1,4 @@
-# Journal 0.3.4 by Kxteel [jpver 0.2.1 by Tsukasa]
+# Journal 0.3.4 by Kxteel [jpver 0.3.0 by Tsukasa]
 
 <img src="assets/journal_icon.png" alt="クエストブック" width="128">
 
@@ -40,6 +40,7 @@ VanaCoreは、Ashitaと同じ呼び出しができる場合に使う想定です
 - 近くのクエストをコンパスへ出す範囲が、少し広くなりました。
 - コンパスやトラッカーからクエストを開くと、そのクエストの詳細だけが開きます。詳細の窓の大きさは、アドオンを読み直すまで覚えています。
 - 繰り返せるクエストは、終わったあとでも印が残ります。
+- クエストの欄に CatsEye を足しました。Horutoto Hakken の手順を日本語で読めます。進行の印は付きません。
 
 矢印が指す位置の計算は、これまでと同じです。
 
@@ -77,6 +78,6 @@ Journalを閉じると、クエストブックの絵が出ます。クリック�
 
 ## ライセンス
 
-Journalの原著作権は Copyright (c) 2026 Kxteel です。元のMIT許諾は [Journal/LICENSE](LICENSE) に原文のままあります。日本語版の表示は [jpver 0.2.1 by Tsukasa] です。プログラムの版番号は 0.3.4 です。
+Journalの原著作権は Copyright (c) 2026 Kxteel です。元のMIT許諾は [Journal/LICENSE](LICENSE) に原文のままあります。日本語版の表示は [jpver 0.3.0 by Tsukasa] です。プログラムの版番号は 0.3.4 です。
 
 ソースをまとめた配布物は GPLv3 です。全文は [Journal/COPYING](COPYING) にあります。無保証で、条件に従えば見ること、変えること、再配布ができます。MIT、BSD、OFLの各通知は [Journal/THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) と [Journal/licenses](licenses) に残しています。これらの通知は消さないでください。
