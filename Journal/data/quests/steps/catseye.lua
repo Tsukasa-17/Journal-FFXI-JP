@@ -13,6 +13,22 @@ Q.STEPS = {
         'Gan-Ban に戻り、セルビナの織工ギルド (H-9) にいる Renovio を訪ねる。',
         '破片と素材を Renovio に渡して、装備を直してもらう。鉢巻は亜麻糸x2、衣は亜麻糸x1と草糸x2、手甲はラワン材x2、下ばきは毛糸x1、脚絆は木綿糸x2。',
     },
+
+    catseye_ring_around_the_roses = {
+        '北サンドリア (I-8) の噴水の隣の花壇を調べる。',
+        '南サンドリア (M-8) の Aeolia に戻る。',
+    },
+
+    catseye_give_me_a_ring = {
+        'ウィンダス森の区 (K-11) の Moyeyo に話しかける。',
+        'ウィンダス石の区 (I-4) の Dim Sparkle を調べる。スロープを下りた House of Heroes のそば、ウォータの近く。',
+        'Moyeyo に戻る。',
+        'ホームポイントの近く (H-9) にいる Abu Dabudabu に会う。',
+    },
+
+    catseye_hungry_customer = {
+        '南サンドリアの宿屋「ライオン Springs」(K-6) にいる Couquillard に、野兎の肉を3つ渡す。繰り返しできる。',
+    },
 }
 
 return Q

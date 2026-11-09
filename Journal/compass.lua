@@ -158,11 +158,85 @@ local function load_positions()
         return positions
     end
 
-    local ok, list = pcall(require, 'data.npc_positions')
+    local merged = {}
 
-    index_positions(ok and type(list) == 'table' and list or {})
+    local function take(list)
+        if type(list) ~= 'table' then
+            return
+        end
+
+        for name, entries in pairs(list) do
+            if type(name) == 'string' and type(entries) == 'table' then
+                local dest = merged[name]
+
+                if dest == nil then
+                    dest = {}
+                    merged[name] = dest
+                end
+
+                for _, entry in ipairs(entries) do
+                    if type(entry) == 'table' then
+                        dest[#dest + 1] = entry
+                    end
+                end
+            end
+        end
+    end
+
+    local ok, list = pcall(require, 'data.npc_positions')
+    take(ok and list)
+    local extra_ok, extra = pcall(require, 'data.npc_positions_catseye')
+    take(extra_ok and extra)
+
+    local dirs = {}
+    local path_ok, dump = pcall(require, 'questdump')
+
+    if path_ok and dump.candidate_dirs ~= nil then
+        dirs = dump.candidate_dirs()
+    end
+
+    for _, dir in ipairs(dirs) do
+        local path = tostring(dir):gsub('\\', '/'):gsub('/+$', '') .. '/npc_positions_custom.lua'
+        local chunk = loadfile(path)
+
+        if chunk == nil and path:match('^%a:') then
+            chunk = loadfile(path:gsub('/', '\\'))
+        end
+
+        if chunk ~= nil then
+            local loaded_ok, loaded = pcall(chunk)
+            take(loaded_ok and loaded)
+        end
+    end
+
+    index_positions(merged)
 
     return positions
+end
+
+function M.AddPosition(name, entry)
+    load_positions()
+    local key = zonematch.normalize(name)
+    local rows = positions[key]
+
+    if rows == nil then
+        rows = {}
+        positions[key] = rows
+        position_names[key] = name
+    end
+
+    local zone = entry[1]
+
+    for index, row in ipairs(rows) do
+        if row[1] == zone then
+            rows[index] = entry
+            search_index = nil
+            return
+        end
+    end
+
+    rows[#rows + 1] = entry
+    search_index = nil
 end
 
 -- For the tests: use this table instead of the file.

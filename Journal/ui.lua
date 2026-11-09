@@ -1381,7 +1381,7 @@ end
 local function display_status(item)
     local status = item.status or 'not_started'
 
-    if item.trackable == false and status == 'not_started' then
+    if item.trackable == false and item.chat_track ~= true and status == 'not_started' then
         return 'untracked'
     end
 
@@ -1770,9 +1770,17 @@ local function draw_selectable_status_list(
 
                         imgui.PopStyleColor()
                     else
+                        local heading = block.title
+
+                        if block.zone_heading and controller.JapaneseZone then
+                            heading = controller.JapaneseZone(heading)
+                        elseif not block.raw_title then
+                            heading = tx(heading)
+                        end
+
                         imgui.TextColored(
                             colors.gold,
-                            block.raw_title and block.title or tx(block.title)
+                            heading
                         )
 
                         if block.done then
@@ -2202,7 +2210,22 @@ local function draw_metadata(selected)
                 and field[1] == tx('Prereq: ')
             ) then
 
-            if field[1] == tx('NPC: ') and controller.AddCompassNpcByName then
+            if field[1] == tx('Zone: ') and controller.JapaneseZone then
+                imgui.TextColored(
+                    colors.text_dim,
+                    field[1] .. tostring(controller.JapaneseZone(field[2]))
+                )
+            elseif field[1] == tx('Items: ') then
+                richtext.draw_wrapped(
+                    field[1] .. tostring(i18n.step(tostring(field[2]))),
+                    {
+                        styles = get_styles(),
+                        color = colors.text_dim,
+                        size = journal_font_size,
+                        id = 'items' .. tostring(selected.id or selected.name or ''),
+                    }
+                )
+            elseif field[1] == tx('NPC: ') and controller.AddCompassNpcByName then
                 -- The NPC that starts the quest: each name (the data may
                 -- hold several, separated by "/") is clickable, as in the
                 -- steps. The zone of the quest helps to pick the right one.
@@ -2523,6 +2546,31 @@ local function draw_details_button(
             imgui.PopStyleColor()
         end
     end
+
+    if selected.chat_track and controller.SetCatseyeStatus then
+        local actions = {
+            { 'active', 'Mark in progress' },
+            { 'completed', 'Mark completed' },
+            { 'not_started', 'Mark not started' },
+        }
+        local gap = 4
+        local each = math.floor((button_width - gap * 2) / 3)
+
+        imgui.SetCursorPosX((imgui.GetWindowWidth() - button_width) * 0.5)
+
+        for index, action in ipairs(actions) do
+            if index > 1 then
+                imgui.SameLine(0, gap)
+            end
+
+            if imgui.Button(
+                tx(action[2]) .. '##catseye_' .. action[1],
+                { each, ui_button_height }
+            ) then
+                controller.SetCatseyeStatus(selected, action[1])
+            end
+        end
+    end
 end
 
 -- Height kept at the bottom of the details panel for the pin button. The
@@ -2549,6 +2597,14 @@ local function details_controls_height()
         and controller.ToggleCompassTarget then
 
         rows = rows + 1
+    end
+
+    if controller and controller.GetSelectedQuest and controller.SetCatseyeStatus then
+        local selected = controller.GetSelectedQuest()
+
+        if selected and selected.chat_track then
+            rows = rows + 1
+        end
     end
 
     return rows * (ui_button_height + 8) + 8
@@ -3775,6 +3831,7 @@ local function draw_journal_list(
             list_extras[#list_extras + 1] = {
                 at_index = group.index,
                 title = group.zone,
+                zone_heading = true,
             }
         end
     end
@@ -6178,6 +6235,15 @@ local function draw_settings_window()
                     row[4]
                 )
             end
+        end
+
+        if controller.GetShowCatseye and controller.SetShowCatseye then
+            draw_settings_checkbox(
+                'show_catseye',
+                tx('Show CatsEye quests'),
+                controller.GetShowCatseye(),
+                controller.SetShowCatseye
+            )
         end
 
         if controller.GetJournalMiniButton

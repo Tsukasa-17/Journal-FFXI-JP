@@ -236,7 +236,7 @@ local function count_keys(path)
     return n
 end
 check('translation keys 7692', count_keys('/workspace/Journal/data/translations_ja.lua') == 7692)
-check('ui keys 363', count_keys('/workspace/Journal/data/ui_ja.lua') == 363)
+check('ui keys 368', count_keys('/workspace/Journal/data/ui_ja.lua') == 368)
 check('prox range', logic.prox_range.radius == 30 and logic.prox_range.keep == 35)
 local worldmark = require('worldmark')
 check('arrow file map', worldmark.IconFile('available') == 'available.png' and worldmark.IconFile('missing') == nil)
@@ -250,20 +250,80 @@ check('old categories remain',
     counts.sandoria > 0 and counts.bastok > 0 and counts.windurst > 0
     and counts.jeuno > 0 and counts.outlands > 0 and counts.other > 0
     and counts.whitegate > 0 and counts.crystal_war > 0)
-check('catseye one quest', counts.catseye == 1)
-local hakken = quest_data.QUESTS.catseye[1]
+check('catseye four quests', counts.catseye == 4)
+local hakken
+for _, quest in ipairs(quest_data.QUESTS.catseye) do
+    if quest.id == 'catseye_horutoto_hakken' then
+        hakken = quest
+    end
+end
 check('hakken english title', hakken.name == 'Horutoto Hakken' and i18n.step('Horutoto Hakken') == 'Horutoto Hakken')
-check('hakken untracked', hakken.trackable == false and hakken.tracker_id == nil and hakken.tracker_area == nil)
+check('hakken untracked', hakken.trackable == false and hakken.tracker_id == nil and hakken.chat_track == true)
 check('hakken japanese step', hakken.steps[1] == '東サルタバルタ (J-7) から内ホルトト遺跡に入る。')
 check('hakken ten steps', #hakken.steps == 10)
 local positions = require('data.npc_positions')
 check('no invented npc position', positions['Gan-Ban'] == nil and positions['Renovio'] == nil)
 local tracker = require('tracker')
 local listed = tracker.GetQuestArea('catseye')
-check('hakken in list', #listed == 1 and listed[1].name == 'Horutoto Hakken' and listed[1].status == 'not_started')
+local listed_hakken
+for _, quest in ipairs(listed) do
+    if quest.name == 'Horutoto Hakken' then
+        listed_hakken = quest
+    end
+end
+check('hakken in list', #listed == 4 and listed_hakken ~= nil and listed_hakken.status == 'not_started')
 check('sandoria list remains', #tracker.GetQuestArea('sandoria') > 10)
 local order = tracker.GetQuestCategories()
 check('category order', order[8] == 'crystal_war' and order[9] == 'catseye' and #order == 9)
+check('zone heading ja', logic.JapaneseZone("Southern San d'Oria") == '南サンドリア')
+check('zone heading ruins', logic.JapaneseZone('Inner Horutoto Ruins') == '内ホルトト遺跡')
+check('zone heading kept', logic.JapaneseZone('内ホルトト遺跡') == '内ホルトト遺跡')
+check('zone heading fallback', logic.JapaneseZone('Not A Real Zone XYZ') == 'Not A Real Zone XYZ')
+check('zone heading other', logic.JapaneseZone('Other') == 'その他')
+check('catseye shown by default', logic.GetShowCatseye() == true)
+local shown_tabs = logic.GetQuestCategories()
+local catseye_tab
+for index, category in ipairs(shown_tabs) do
+    if category == 'catseye' then
+        catseye_tab = index
+    end
+end
+check('catseye tab present', catseye_tab ~= nil)
+logic.SetQuestSelection(catseye_tab, 1)
+local groups = logic.GetQuestListGroups()
+check('catseye grouped by zone', #groups == 3)
+local group_names = {}
+for _, group in ipairs(groups) do
+    group_names[logic.JapaneseZone(group.zone)] = true
+end
+check('catseye zone headings',
+    group_names['内ホルトト遺跡'] and group_names['南サンドリア'] and group_names['ウィンダス森の区'])
+logic.SetShowCatseye(false)
+local hidden_tabs = logic.GetQuestCategories()
+local hidden = false
+for _, category in ipairs(hidden_tabs) do
+    if category == 'catseye' then
+        hidden = true
+    end
+end
+check('catseye tab hidden', hidden == false)
+check('left catseye tab', logic.GetQuestSelection().category_index == 1)
+logic.SetShowCatseye(true)
+local track = require('catseye_track')
+track.set_quests(quest_data.QUESTS.catseye)
+track.reset()
+local give = { name = 'Give Me a Ring', chat_track = true, complete_zone = 241, complete_on = { 'ウィンダスリングを手にいれた' } }
+check('accept sets active', track.on_text('◇ Quest Accepted: Give Me a Ring', 241).action == 'active' and track.status_for(give) == 'active')
+check('complete needs active zone', track.on_text('ウィンダスリングを手にいれた！', 230) == nil and track.status_for(give) == 'active')
+check('complete on reward', track.on_text('ウィンダスリングを手にいれた！', 241).action == 'completed' and track.status_for(give) == 'completed')
+track.reset()
+check('reward before accept ignored', track.on_text('サンドリアリングを手にいれた！', 230) == nil)
+check('unknown name kept', track.on_text('Quest Accepted: Totally New Quest', nil).known == false)
+check('unknown row', track.unknown_rows()[1].name == 'Totally New Quest')
+local soil = { name = 'Horutoto Hakken', complete_zone = 248, complete_on = hakken.complete_on }
+track.on_text('Quest Accepted: Horutoto Hakken', 192)
+check('any soil piece completes', track.on_text('大地の脚絆を手にいれた！', 248).action == 'completed')
+check('npcpos line', require('npcpos').format_entry('Aeolia', 230, 1.5, -2, 0.25) == '["Aeolia"] = { { 230, 1.50, -2.00, 0.25 } },')
 
 local function blank_packet(length)
     return string.rep('\0', length)
