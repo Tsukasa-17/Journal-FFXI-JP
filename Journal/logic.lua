@@ -847,6 +847,8 @@ local function apply_config_part_two()
         require('font_choice').clamp_scale(config.journal_text_scale, TEXT_SCALE_MIN, TEXT_SCALE_MAX, 1.0)
     pin_background =
         clamp_opacity(config.pin_background, 0.0, BACKGROUND_MAX, 0.0)
+    M.pin_bold = config.pin_bold == true
+    M.pin_stack_max = M.ClampPinStackMax(config.pin_stack_max)
     language = 'ja'
     config.language = language -- Migrate only this preference; retain all other settings.
     require('font_choice').load(config.font_choice)
@@ -947,7 +949,16 @@ local function apply_config()
     pin_auto_zone = config.pin_auto_zone == true
     pin_scale = clamp_pin_scale(config.pin_scale)
     M.pin_text_scale = require('font_choice').clamp_scale(
-        config.pin_text_scale, 0.50, 1.40, 1.0)
+        config.pin_text_scale, 0.50, 2.00, 1.0)
+
+    -- Before pin_layout_v2 the tracker size also scaled the text. Carry
+    -- that into the text size once, so the text keeps its size.
+    if config.pin_layout_v2 ~= true then
+        M.pin_text_scale = require('font_choice').clamp_scale(
+            M.pin_text_scale * pin_scale, 0.50, 2.00, 1.0)
+        config.pin_layout_v2 = true
+        config.pin_text_scale = M.pin_text_scale
+    end
     do
         local function saved_px(value)
             value = tonumber(value)
@@ -1024,6 +1035,9 @@ local function update_config_values()
     config.pin_auto_zone = pin_auto_zone
     config.pin_scale = pin_scale
     config.pin_text_scale = M.pin_text_scale or 1.0
+    config.pin_layout_v2 = true
+    config.pin_bold = M.pin_bold == true
+    config.pin_stack_max = M.pin_stack_max or 0
     config.settings_width = M.settings_w
     config.settings_height = M.settings_h
     config.pin_show_next = pin_show_next
@@ -1432,9 +1446,8 @@ local function build_quest_link_index()
         return quest_link_index
     end
 
-    if not tracker_is_ready() then
-        return nil
-    end
+    -- The index is static quest data. It can be built before the tracker
+    -- has received the first packet (IsReady still false).
 
     local index = {
         by_id = {},
@@ -1595,6 +1608,7 @@ local function select_quest(id, keep_search)
     local info = index and index.by_id[id]
 
     if info == nil then
+        M.jump_fail = index == nil and 'no index' or 'unknown id'
         return false
     end
 
@@ -1630,9 +1644,10 @@ local function select_quest(id, keep_search)
     M.SetQuestSelection(target, 1)
 
     local found = false
+    local list = M.GetQuestList()
 
-    for position, quest in ipairs(M.GetQuestList()) do
-        if quest.id == id then
+    for position, quest in ipairs(list) do
+        if tostring(quest.id) == tostring(id) then
             M.SetQuestSelection(target, position)
             found = true
             break
@@ -1640,6 +1655,14 @@ local function select_quest(id, keep_search)
     end
 
     quest_jump_in_progress = false
+
+    if not found then
+        M.jump_fail = string.format(
+            'not in list (status=%s, rows=%d)',
+            tostring(status),
+            #list
+        )
+    end
 
     return found
 end
@@ -3405,6 +3428,8 @@ function M.GetPinState()
         auto_zone = pin_auto_zone,
         scale = pin_scale,
         text_scale = M.pin_text_scale or 1.0,
+        bold = M.pin_bold == true,
+        stack_max = M.pin_stack_max or 0,
         show_next = pin_show_next,
         opacity = pin_opacity,
         background = pin_background,
@@ -3468,7 +3493,7 @@ function M.AdjustPinScale(direction)
     return M.SetPinScale(pin_scale + direction * PIN_SCALE_STEP)
 end
 
--- Tracker text size, 50% to 140%, separate from the Journal text size
+-- Tracker text size, 50% to 200%, separate from the Journal text size
 -- and from pin_scale. Saved values such as 79% are not rounded away.
 function M.GetPinTextScale()
     return M.pin_text_scale or 1.0
@@ -3476,7 +3501,7 @@ end
 
 function M.SetPinTextScale(value)
     local scale = require('font_choice').clamp_scale(
-        value, 0.50, 1.40, M.pin_text_scale or 1.0)
+        value, 0.50, 2.00, M.pin_text_scale or 1.0)
 
     if scale == M.pin_text_scale then
         return scale
@@ -3490,6 +3515,75 @@ end
 
 function M.AdjustPinTextScale(direction)
     return M.SetPinTextScale((M.pin_text_scale or 1.0) + (tonumber(direction) or 0) * 0.05)
+end
+
+-- The tracker text in the bold face.
+function M.GetPinBold()
+    return M.pin_bold == true
+end
+
+function M.SetPinBold(value)
+    local bold = value == true
+
+    if bold ~= (M.pin_bold == true) then
+        M.pin_bold = bold
+        request_config_save()
+    end
+
+    return bold
+end
+
+-- Maximum height of the stacked tracker in pixels. 0 lets it grow with
+-- every pin; any other value is kept between 200 and 960.
+M.PIN_STACK_MIN = 200
+M.PIN_STACK_MAX = 960
+M.PIN_STACK_STEP = 40
+
+function M.ClampPinStackMax(value)
+    value = tonumber(value)
+
+    if value == nil or value ~= value or value == math.huge or value <= 0 then
+        return 0
+    end
+
+    value = math.floor(value + 0.5)
+
+    return math.max(M.PIN_STACK_MIN, math.min(M.PIN_STACK_MAX, value))
+end
+
+function M.GetPinStackMax()
+    return M.pin_stack_max or 0
+end
+
+function M.SetPinStackMax(value)
+    local height = M.ClampPinStackMax(value)
+
+    if height ~= (M.pin_stack_max or 0) then
+        M.pin_stack_max = height
+        request_config_save()
+    end
+
+    return height
+end
+
+-- Going down from the minimum turns the limit off; going up from off
+-- starts at the minimum.
+function M.AdjustPinStackMax(direction)
+    local current = M.pin_stack_max or 0
+
+    if (tonumber(direction) or 0) >= 0 then
+        if current <= 0 then
+            return M.SetPinStackMax(M.PIN_STACK_MIN)
+        end
+
+        return M.SetPinStackMax(current + M.PIN_STACK_STEP)
+    end
+
+    if current <= M.PIN_STACK_MIN then
+        return M.SetPinStackMax(0)
+    end
+
+    return M.SetPinStackMax(current - M.PIN_STACK_STEP)
 end
 
 -- Font changes apply on reload; Journal text scale (0.5 to 1.4) applies immediately.
@@ -4141,7 +4235,10 @@ function M.JumpToMission(area, id, name, keep_search)
         end
     end
 
-    if area_index == nil or not tracker_is_ready() then
+    -- The mission list is static data: it can open even before the
+    -- tracker has received the first packet (IsReady still false).
+    if area_index == nil then
+        M.jump_fail = 'area'
         return false
     end
 
@@ -4159,6 +4256,7 @@ function M.JumpToMission(area, id, name, keep_search)
     end
 
     if target == nil then
+        M.jump_fail = 'no target'
         return false
     end
 
@@ -4187,16 +4285,35 @@ function M.JumpToMission(area, id, name, keep_search)
 
     M.SetMissionSelection(selector, 1)
 
-    for position, mission in ipairs(M.GetMissionList()) do
+    local list = M.GetMissionList()
+    local loose = nil
+
+    for position, mission in ipairs(list) do
         if tostring(mission.id) == tostring(id)
-            and tostring(mission.name or '') == tostring(name or '')
             and (mission.area == nil or mission.area == area) then
 
-            M.SetMissionSelection(selector, position)
+            if tostring(mission.name or '') == tostring(name or '') then
+                M.SetMissionSelection(selector, position)
 
-            return true
+                return true
+            end
+
+            loose = loose or position
         end
     end
+
+    if loose ~= nil then
+        M.SetMissionSelection(selector, loose)
+
+        return true
+    end
+
+    M.jump_fail = string.format(
+        'not in list (status=%s, selector=%s, rows=%d)',
+        tostring(target.status),
+        tostring(selector),
+        #list
+    )
 
     return false
 end
@@ -5000,6 +5117,84 @@ do
 
     function M.OpenQuestFromCompass(id)
         return M.OpenQuestSheet(id)
+    end
+
+    -- The mission of a pin in the mission data, by id and name first, then
+    -- by id in the area of the pin, then by name alone (case ignored), so
+    -- a pin saved by an older version still finds its mission.
+    function M.FindPinnedMission(entry)
+        if entry == nil then
+            return nil, nil
+        end
+
+        local want_id = tostring(entry.id or '')
+        local want_name = tostring(entry.name or ''):lower()
+        local by_area, by_name = nil, nil
+
+        for _, area in ipairs(mission_areas) do
+            for _, mission in ipairs(tracker.GetMissionArea(area) or {}) do
+                local same_id = tostring(mission.id) == want_id
+                local same_name = tostring(mission.name or ''):lower() == want_name
+
+                if same_id and same_name
+                    and (entry.area == nil or entry.area == area) then
+
+                    return area, mission
+                end
+
+                if same_id and same_name and by_area == nil then
+                    by_area = { area, mission }
+                elseif same_id and area == entry.area and by_area == nil then
+                    by_area = { area, mission }
+                elseif same_name and by_name == nil then
+                    by_name = { area, mission }
+                end
+            end
+        end
+
+        local pick = by_area or by_name
+
+        if pick == nil then
+            return nil, nil
+        end
+
+        return pick[1], pick[2]
+    end
+
+    -- A click on a name in the Tracker: the Journal opens on its list,
+    -- with the mission or quest selected. A pin saved without its area
+    -- is looked for in every mission area.
+    function M.OpenPinInJournal(entry)
+        if entry == nil or entry.id == nil then
+            return false
+        end
+
+        local found = false
+
+        if entry.kind == 'mission' then
+            local area, mission = M.FindPinnedMission(entry)
+
+            if mission ~= nil then
+                found = M.JumpToMission(area, mission.id, mission.name)
+            end
+        elseif entry.kind == 'quest' then
+            found = M.JumpToQuest(entry.id)
+
+            if not found and entry.name ~= nil then
+                local other = M.GetQuestIdByName(entry.name)
+
+                if other ~= nil and tostring(other) ~= tostring(entry.id) then
+                    found = M.JumpToQuest(other)
+                end
+            end
+        end
+
+        if found then
+            M.SetJournalMini(false)
+            M.SetJournalVisible(true)
+        end
+
+        return found
     end
 
     function M.GetQuestIconKind(id)

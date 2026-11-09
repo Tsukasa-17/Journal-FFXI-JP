@@ -33,8 +33,13 @@ local WINDOW_WIDTH = 420
 local TAB_NAME_LENGTH = 12
 local TEXT_SIZE = 16
 
--- Text size of the current frame, TEXT_SIZE times the tracker scale.
+-- Text size of the current frame, TEXT_SIZE times the tracker text size.
 local current_size = TEXT_SIZE
+
+-- Bold text in the current frame. Without a bold face the text is drawn a
+-- second time one pixel to the right.
+local current_bold = false
+local fake_bold = false
 
 -- Layout of the default ImGui style, used to set buttons flush right.
 local WINDOW_PADDING = 8
@@ -144,20 +149,83 @@ local function columns_of(char)
     return 2
 end
 
+local function is_ascii(text)
+    return text:match('^[%z\1-\127]*$') ~= nil
+end
+
+-- English titles in lower case, for names that differ from the dictionary
+-- only in case, in the apostrophe or in a "(Bastok)" suffix. A lower-case
+-- title shared by two different translations is left out.
+local loose_titles = nil
+
+local function loose_title(name)
+    if loose_titles == nil then
+        loose_titles = {}
+
+        local ok, words = pcall(require, 'data.translations_ja')
+
+        if ok and type(words) == 'table' then
+            for key, value in pairs(words) do
+                if type(key) == 'string'
+                    and type(value) == 'string'
+                    and key:sub(1, 4) ~= 'ctx:' then
+
+                    local lower = key:lower()
+                    local prior = loose_titles[lower]
+
+                    if prior == nil then
+                        loose_titles[lower] = value
+                    elseif prior ~= value then
+                        loose_titles[lower] = false
+                    end
+                end
+            end
+        end
+    end
+
+    local function find(text)
+        local value = loose_titles[text:lower()]
+
+        return value ~= false and value or nil
+    end
+
+    local plain = name:gsub('\226\128\153', "'")
+
+    return find(plain)
+        or find((plain:gsub('%s*%b()%s*$', '')))
+end
+
 local function display_name(entry)
-    return tostring(i18n.step(tostring(entry.name or ''), {
+    local name = tostring(entry.name or '')
+    local shown = tostring(i18n.step(name, {
         kind = entry.kind,
         area = entry.area,
         id = entry.id,
     }))
+
+    if not is_ascii(shown)
+        or i18n.get_language == nil
+        or i18n.get_language() ~= 'ja' then
+
+        return shown
+    end
+
+    -- A pin saved with an area that is not the one of the dictionary.
+    for _, other in ipairs({
+        tostring(i18n.step(name, { kind = entry.kind, id = entry.id })),
+        tostring(i18n.step(name)),
+        loose_title(name),
+    }) do
+        if other ~= nil and not is_ascii(other) then
+            return other
+        end
+    end
+
+    return shown
 end
 
 local function short_name(name)
     name = tostring(name or '')
-
-    if name:match('^[%z\1-\127]*$') ~= nil then
-        name = string.upper(name)
-    end
 
     local chars = utf8_chars(name)
     local total = 0
@@ -201,22 +269,24 @@ function M.TabSpec(entry, index)
     }
 end
 
--- Font size is independent of the Journal. It multiplies the tracker size
--- so the window width and the text stay in proportion (wrap unchanged).
+-- The window size sets only the width of the window, and the text size
+-- only the size of the text. Longer lines wrap.
 function M.LayoutScale(pin)
     local size_scale = tonumber(pin and pin.scale) or 1.0
     local text_scale = tonumber(pin and pin.text_scale) or 1.0
+
+    if size_scale ~= size_scale or size_scale <= 0 or size_scale == math.huge then
+        size_scale = 1.0
+    end
 
     if text_scale ~= text_scale or text_scale <= 0 or text_scale == math.huge then
         text_scale = 1.0
     end
 
-    local scale = size_scale * text_scale
-
     return {
-        scale = scale,
-        font = TEXT_SIZE * scale,
-        width = WINDOW_WIDTH * scale,
+        scale = text_scale,
+        font = TEXT_SIZE * text_scale,
+        width = WINDOW_WIDTH * size_scale,
         text_scale = text_scale,
         size_scale = size_scale,
     }
@@ -233,13 +303,18 @@ local function button_width(label)
 end
 
 -- Moves the cursor so that something this wide ends at the right edge.
+-- The right edge is read from the free space of the line, so a scrollbar
+-- (the stacked height limit) does not cover the end of the text.
 local function align_right(width)
-    imgui.SetCursorPosX(
-        math.max(
-            WINDOW_PADDING,
-            imgui.GetWindowWidth() - width - WINDOW_PADDING
-        )
-    )
+    local edge = imgui.GetWindowWidth() - WINDOW_PADDING
+    local ok_avail, avail = pcall(imgui.GetContentRegionAvail)
+    local ok_x, x = pcall(imgui.GetCursorPosX)
+
+    if ok_avail and ok_x and tonumber(avail) ~= nil and tonumber(x) ~= nil then
+        edge = x + avail
+    end
+
+    imgui.SetCursorPosX(math.max(WINDOW_PADDING, edge - width))
 end
 
 -- One line of text flush right, with a shadow. With icon_color, an infinity
@@ -286,6 +361,8 @@ local function right_text(color, text, icon_color, lead)
 
     -- The line is reserved with invisible text and then drawn twice, the
     -- first time as the shadow.
+    local text_x, text_y = imgui.GetCursorPos()
+
     imgui.PushStyleColor(ImGuiCol_Text, TRANSPARENT)
     local reserved = pcall(imgui.Text, text)
     imgui.PopStyleColor()
@@ -296,6 +373,10 @@ local function right_text(color, text, icon_color, lead)
 
         draw:AddText({ x + 1, y + 1 }, shadow_color(), text)
         draw:AddText({ x, y }, imgui.GetColorU32(color), text)
+
+        if fake_bold then
+            draw:AddText({ x + 1, y }, imgui.GetColorU32(color), text)
+        end
 
         if icon_color ~= nil then
             local icon_x = x + text_width(text) + icon_gap
@@ -326,6 +407,28 @@ local function right_text(color, text, icon_color, lead)
     if not drawn then
         imgui.TextColored(color, text)
     end
+
+    -- Where the text is, in window coordinates, for a button over it.
+    return text_x, text_y, text_width(text) + icon_gap + icon_width, line_height
+end
+
+-- An invisible button over a line drawn by right_text. A plain Text item
+-- does not take the click (the press starts moving the window instead).
+local function line_button(id, x, y, width, height)
+    if x == nil or y == nil or imgui.InvisibleButton == nil then
+        return false, false
+    end
+
+    local after_x, after_y = imgui.GetCursorPos()
+
+    imgui.SetCursorPos({ x, y })
+
+    local clicked = imgui.InvisibleButton(id, { math.max(1, width), math.max(1, height) })
+    local hovered = imgui.IsItemHovered()
+
+    imgui.SetCursorPos({ after_x, after_y })
+
+    return clicked, hovered
 end
 
 -- The click on an NPC name goes to the controller (set while drawing).
@@ -337,6 +440,7 @@ local function text_wrapped(color, text, id)
         color = color,
         italic_color = italic_tint,
         size = current_size,
+        bold = current_bold,
         align = 'right',
         shadow = true,
         on_npc = click_npc and function(name)
@@ -494,25 +598,55 @@ local function draw_pin(controller, index, entry)
         lead = kind ~= nil and controller.worldmark.GetIcon(kind) or nil
     end
 
-    right_text(
+    local name = string.upper(display_name(entry))
+    local title_x, title_y, title_w, title_h = right_text(
         colors[entry.kind] or colors.quest,
-        string.upper(display_name(entry)),
+        name,
         entry.repeatable == true and colors.repeatable or nil,
         lead
     )
 
-    if entry.kind == 'quest'
-        and entry.id ~= nil
-        and controller.OpenQuestSheet ~= nil
-        and imgui.IsItemHovered
-        and imgui.IsItemHovered() then
+    if entry.id ~= nil and controller.OpenPinInJournal ~= nil then
+        local clicked, hovered = line_button(
+            '##pin_open_' .. index,
+            title_x,
+            title_y,
+            title_w,
+            title_h
+        )
 
-        if imgui.SetTooltip then
-            imgui.SetTooltip(i18n.t('Opens the quest sheet'))
+        if hovered and imgui.SetTooltip then
+            imgui.SetTooltip(i18n.t('Opens it in the Journal list'))
         end
 
-        if imgui.IsItemClicked and imgui.IsItemClicked() then
-            controller.OpenQuestSheet(entry.id)
+        if clicked and not controller.OpenPinInJournal(entry) then
+            local chat_print = require('encoding').chat_print
+            local found = ''
+
+            if entry.kind == 'mission' and controller.FindPinnedMission ~= nil then
+                local area, mission = controller.FindPinnedMission(entry)
+
+                found = mission ~= nil
+                    and string.format(' -> %s/%s', tostring(area), tostring(mission.id))
+                    or ' -> none'
+            end
+
+            if controller.jump_fail then
+                found = found .. ' (' .. tostring(controller.jump_fail) .. ')'
+            end
+
+            chat_print(string.format(
+                i18n.t('[Journal] %s was not found in the Journal list.'),
+                name
+            ))
+            chat_print(string.format(
+                '[Journal] kind=%s area=%s id=%s name=%s%s',
+                tostring(entry.kind),
+                tostring(entry.area),
+                tostring(entry.id),
+                tostring(entry.name),
+                found
+            ))
         end
     end
 
@@ -558,7 +692,23 @@ local function draw_pin(controller, index, entry)
     end
 end
 
-local function draw_stacked(controller, pins)
+-- Ashita 4.3 takes ImGuiChildFlags as the third argument of BeginChild,
+-- Ashita 4.1 the old border boolean.
+local CHILD_NO_BORDER = ImGuiChildFlags_None or false
+
+local function begin_child(id, size, flags)
+    if flags == nil then
+        return imgui.BeginChild(id, size, CHILD_NO_BORDER)
+    end
+
+    return imgui.BeginChild(id, size, CHILD_NO_BORDER, flags)
+end
+
+-- Height of the stacked items in the last frame, so the child window is
+-- only as tall as they need while they fit under the limit.
+local stack_height = nil
+
+local function draw_stack_items(controller, pins)
     local groups = group_by_kind(pins)
 
     for _, kind in ipairs(kinds) do
@@ -578,26 +728,41 @@ local function draw_stacked(controller, pins)
     end
 end
 
-local function draw_tabs(controller, pins, active)
-    -- The row of tabs, with a bar between missions and quests.
-    local row = M.TabRow(pins)
+-- max_height 0 lets the tracker grow with every pin. Otherwise the items
+-- scroll with the mouse wheel once they are taller than max_height.
+local function draw_stacked(controller, pins, max_height)
+    max_height = tonumber(max_height) or 0
 
-    local width = 0
+    if max_height <= 0 or imgui.BeginChild == nil then
+        stack_height = nil
+        draw_stack_items(controller, pins)
+        return
+    end
 
-    for position, item in ipairs(row) do
-        if item.separator then
-            width = width + text_width('|')
-        else
-            width = width + button_width(item.label)
-        end
+    local height = math.min(stack_height or max_height, max_height)
 
-        if position > 1 then
-            width = width + ITEM_SPACING_X
+    imgui.PushStyleColor(ImGuiCol_ChildBg, TRANSPARENT)
+
+    if begin_child('##PinStack', { 0, math.max(1, height) }) then
+        draw_stack_items(controller, pins)
+
+        local ok, content = pcall(imgui.GetCursorPosY)
+
+        if ok and tonumber(content) ~= nil then
+            stack_height = math.ceil(content) + 2
         end
     end
 
-    align_right(width)
+    imgui.EndChild()
+    imgui.PopStyleColor()
+end
 
+-- The tab row scrolls sideways when it is wider than the window: the
+-- < and > buttons, the mouse wheel over the row, and the active tab
+-- brought into view when it changes.
+local tab_scroll = { active = nil, step = 0 }
+
+local function draw_tab_buttons(controller, row, active, follow)
     for position, item in ipairs(row) do
         if position > 1 then
             imgui.SameLine()
@@ -627,9 +792,101 @@ local function draw_tabs(controller, pins, active)
 
             if is_active then
                 imgui.PopStyleColor()
+
+                if follow and imgui.SetScrollHereX then
+                    pcall(imgui.SetScrollHereX, 0.5)
+                end
             end
         end
     end
+end
+
+local function draw_tab_row(controller, row, active)
+    local width = 0
+
+    for position, item in ipairs(row) do
+        if item.separator then
+            width = width + text_width('|')
+        else
+            width = width + button_width(item.label)
+        end
+
+        if position > 1 then
+            width = width + ITEM_SPACING_X
+        end
+    end
+
+    local available = imgui.GetWindowWidth() - WINDOW_PADDING * 2
+
+    if width <= available
+        or imgui.BeginChild == nil
+        or imgui.SetScrollX == nil
+        or imgui.GetScrollX == nil then
+
+        tab_scroll.active = active
+        align_right(width)
+        draw_tab_buttons(controller, row, active, false)
+        return
+    end
+
+    local follow = tab_scroll.active ~= active
+    tab_scroll.active = active
+
+    local arrow = button_width('<') + ITEM_SPACING_X
+    local child_width = math.max(40, available - arrow * 2)
+    local height = imgui.GetTextLineHeight() + 2
+    local step = math.max(40, child_width * 0.6)
+    local move = 0
+
+    imgui.SetCursorPosX(WINDOW_PADDING)
+
+    if step_button('<##pin_tabs_left') then
+        move = -step
+    end
+
+    imgui.SameLine()
+    imgui.PushStyleColor(ImGuiCol_ChildBg, TRANSPARENT)
+
+    if begin_child(
+        '##PinTabs',
+        { child_width, height },
+        ImGuiWindowFlags_NoScrollbar + ImGuiWindowFlags_NoScrollWithMouse
+    ) then
+        draw_tab_buttons(controller, row, active, follow)
+
+        if move == 0 and imgui.IsWindowHovered and imgui.IsWindowHovered() then
+            local ok, wheel = pcall(function()
+                return imgui.GetIO().MouseWheel
+            end)
+
+            if ok and tonumber(wheel) ~= nil and wheel ~= 0 then
+                move = -wheel * step * 0.5
+            end
+        end
+
+        if tab_scroll.step ~= 0 then
+            move = move + tab_scroll.step
+            tab_scroll.step = 0
+        end
+
+        if move ~= 0 then
+            imgui.SetScrollX(math.max(0, imgui.GetScrollX() + move))
+        end
+    end
+
+    imgui.EndChild()
+    imgui.PopStyleColor()
+
+    imgui.SameLine()
+
+    if step_button('>##pin_tabs_right') then
+        tab_scroll.step = step
+    end
+end
+
+local function draw_tabs(controller, pins, active)
+    -- The row of tabs, with a bar between missions and quests.
+    draw_tab_row(controller, M.TabRow(pins), active)
 
     local entry = pins[active]
 
@@ -802,8 +1059,16 @@ function M.Draw(controller, can_draw)
         -- Everything in the window, headers and buttons included, is set
         -- in the text font at the scaled size. Without that font the
         -- window font scale is used instead.
-        local regular = richtext.fonts and richtext.fonts.regular
+        local fonts = richtext.fonts or {}
+        local regular = fonts.regular
         local pushed_font = false
+
+        current_bold = pin.bold == true
+        fake_bold = current_bold and fonts.bold == nil
+
+        if current_bold and fonts.bold ~= nil then
+            regular = fonts.bold
+        end
 
         if regular ~= nil then
             imgui.PushFont(regular, current_size)
@@ -820,7 +1085,7 @@ function M.Draw(controller, can_draw)
         elseif pin.mode == 'tabs' then
             draw_tabs(controller, pins, pin.active)
         else
-            draw_stacked(controller, pins)
+            draw_stacked(controller, pins, pin.stack_max)
         end
 
         apply_pending(controller, pins)

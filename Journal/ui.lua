@@ -6226,7 +6226,7 @@ local function draw_settings_window()
         if controller.GetPinScale and controller.AdjustPinScale then
             draw_settings_stepper(
                 'tracker_size',
-                tx('Size'),
+                tx('Window size'),
                 string.format('%.1fx', controller.GetPinScale()),
                 function(direction)
                     controller.AdjustPinScale(direction)
@@ -6247,6 +6247,33 @@ local function draw_settings_window()
                 end,
                 function()
                     controller.SetPinTextScale(1.0)
+                end
+            )
+        end
+
+        if controller.GetPinBold and controller.SetPinBold then
+            draw_settings_checkbox(
+                'tracker_bold',
+                tx('Bold text'),
+                controller.GetPinBold(),
+                controller.SetPinBold
+            )
+        end
+
+        if controller.GetPinStackMax and controller.AdjustPinStackMax then
+            local stack_max = controller.GetPinStackMax()
+
+            draw_settings_stepper(
+                'tracker_stack_max',
+                tx('Stacked height limit'),
+                stack_max > 0
+                    and string.format('%dpx', stack_max)
+                    or tx('No limit'),
+                function(direction)
+                    controller.AdjustPinStackMax(direction)
+                end,
+                function()
+                    controller.SetPinStackMax(0)
                 end
             )
         end

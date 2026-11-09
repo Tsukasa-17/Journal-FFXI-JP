@@ -3,6 +3,7 @@ local M={}
 local size=96
 local drag=nil
 local next_texture_attempt=0
+local TOOLTIP_SIZE=18
 function M.clamp_size(v)
     v=tonumber(v)
     if not v or v~=v or v==math.huge or v==-math.huge then return 96 end
@@ -82,7 +83,13 @@ function M.draw(imgui,controller,state,texture)
             else opened=(not drag) and pressed;M.cancel()end
         else opened=(not drag) and pressed;M.cancel()end
         if hover and not drag and imgui.BeginTooltip then
-            imgui.BeginTooltip();imgui.Text(tx('Click to open; drag to move.'));imgui.EndTooltip()
+            -- The host font has no Japanese glyphs; use the Journal text font.
+            local font=require('richtext').fonts.regular
+            imgui.BeginTooltip()
+            if font~=nil then imgui.PushFont(font,TOOLTIP_SIZE)end
+            imgui.Text(tx('Click to open; drag to move.'))
+            if font~=nil then imgui.PopFont()end
+            imgui.EndTooltip()
         end
     else M.cancel()end
     imgui.End();imgui.PopStyleVar(3)

@@ -583,7 +583,13 @@ function M.draw_wrapped(text, opts)
     text = tostring(text or '')
 
     local size = opts.size or 16
+    local bold_all = opts.bold == true
     local regular = M.fonts.regular
+
+    if bold_all then
+        regular = M.fonts.bold or regular
+    end
+
     local right = opts.align == 'right'
     local shadow = opts.shadow == true
     local available = 0
@@ -600,8 +606,17 @@ function M.draw_wrapped(text, opts)
 
     -- Width of a piece in its own font. The "|" avoids depending on how
     -- trailing spaces are measured.
+    -- With opts.bold the plain pieces take the bold face as well.
+    local function font_of(kind)
+        if bold_all and (kind == nil or kind == 'bold') then
+            return M.fonts.bold or M.fonts.regular
+        end
+
+        return M.font_for(kind)
+    end
+
     local function measure_kind(value, kind)
-        local font = M.font_for(kind)
+        local font = font_of(kind)
 
         if font ~= nil then
             imgui.PushFont(font, size)
@@ -633,6 +648,7 @@ function M.draw_wrapped(text, opts)
 
         local usable = math.max(40, width - 6)
         local key = text .. '\0' .. math.floor(usable) .. '\0' .. size
+            .. (bold_all and '\0b' or '')
 
         lines = cache.lines[key]
 
@@ -691,7 +707,7 @@ function M.draw_wrapped(text, opts)
                     end
 
                     local function put(piece, offset_x, offset_y, color)
-                        local font = M.font_for(piece.kind)
+                        local font = font_of(piece.kind)
                         local pos = {
                             min_x + shift + piece.x + offset_x,
                             min_y + offset_y,
@@ -722,7 +738,8 @@ function M.draw_wrapped(text, opts)
 
                         put(piece, 0, 0, color)
 
-                        if M.fake_bold(piece.kind) then
+                        if M.fake_bold(piece.kind)
+                            or (bold_all and M.fonts.bold == nil) then
                             put(piece, BOLD_OFFSET, 0, color)
                         end
                     end
