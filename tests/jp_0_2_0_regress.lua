@@ -234,7 +234,7 @@ check('invalid load keeps journal scale', math.abs(logic.GetTextScale() - 0.9) <
 check('invalid load keeps position fields', logic.GetJournalWindowState().x == 12)
 
 local credit = require('jp_credit')
-check('jp credit 0.2.1', credit.version == '0.2.1' and credit.display('0.3.4'):find('0.3.4', 1, true) ~= nil)
+check('jp credit 0.2.2', credit.version == '0.2.2' and credit.display('0.3.4'):find('0.3.4', 1, true) ~= nil)
 local journal_src = io.open('/workspace/Journal/journal.lua'):read('*a')
 check('addon version 0.3.4', journal_src:find("addon.version = '0.3.4'", 1, true) ~= nil)
 check('addon author kxteel', journal_src:find("addon.author  = 'Kxteel'", 1, true) ~= nil)
