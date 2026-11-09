@@ -6545,6 +6545,7 @@ local function draw_settings_window()
 
         imgui.PushStyleColor(ImGuiCol_Text, colors.text_dim)
         imgui.TextWrapped(require('jp_credit').display(addon and addon.version))
+        imgui.TextWrapped(require('jp_credit').contributor_line)
         imgui.PopStyleColor()
     end
 
