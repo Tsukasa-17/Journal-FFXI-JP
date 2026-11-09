@@ -6362,6 +6362,14 @@ function M.HandleCommand(e)
         return
     end
 
+    if command == 'nearby' then
+        for _, line in ipairs(M.ProximityDebug()) do
+            require('encoding').chat_print(line)
+        end
+
+        return
+    end
+
     if command == 'npcpos' then
         local captured, err = require('npcpos').capture()
 
@@ -6999,52 +7007,6 @@ do
                             end
 
                             row.quests[#row.quests + 1] = quest
-                        elseif quest.chat_track and name ~= '' then
-                            local key = zonematch.normalize(name)
-                            local row = missing[key] or { name = name, quests = {} }
-
-                            row.quests[#row.quests + 1] = quest
-                            missing[key] = row
-                        end
-                    end
-                end
-            end
-        end
-
-        if next(missing) ~= nil and M.compass.AshitaApi ~= nil then
-            local api = M.compass.AshitaApi()
-            local me = api and api.me and api.me()
-
-            if me ~= nil then
-                local wanted = {}
-
-                for key in pairs(missing) do
-                    wanted[key] = true
-                end
-
-                local ok, live = pcall(M.compass.ScanMany, api, wanted, me)
-
-                if ok and type(live) == 'table' then
-                    for key, row in pairs(missing) do
-                        local found = live[key]
-
-                        if found ~= nil and found.x ~= nil then
-                            for _, quest in ipairs(row.quests) do
-                                local placed = by_npc[key]
-
-                                if placed == nil then
-                                    placed = {
-                                        name = row.name,
-                                        x = found.x,
-                                        y = found.z,
-                                        quests = {},
-                                    }
-                                    by_npc[key] = placed
-                                    list[#list + 1] = placed
-                                end
-
-                                placed.quests[#placed.quests + 1] = quest
-                            end
                         end
                     end
                 end
@@ -7052,6 +7014,98 @@ do
         end
 
         return list
+    end
+
+    -- CatsEye NPCs have no fixed coordinates. The client only loads an NPC
+    -- when it is near, so this scan runs on every proximity check, not once
+    -- per zone. Names are matched ignoring case and surrounding spaces.
+    function prox.live_rows(api, me)
+        prox.debug_lines = {}
+        local lines = prox.debug_lines
+
+        lines[#lines + 1] = M.show_catseye == false
+            and '[Journal] CatsEyeクエストを表示: オフ'
+            or '[Journal] CatsEyeクエストを表示: オン'
+
+        if M.show_catseye == false or api == nil or me == nil then
+            return {}
+        end
+
+        local missing = {}
+
+        for _, quest in ipairs(get_quest_list_from_tracker('catseye')) do
+            if quest.chat_track and type(quest.npc) == 'string'
+                and require('catseye_track').shows_nearby(
+                    require('catseye_track').status_for(quest),
+                    quest.repeatable == true,
+                    hide_complete_quests
+                ) then
+
+                for part in quest.npc:gmatch('[^/]+') do
+                    local name = part:match('^%s*(.-)%s*$')
+
+                    if name ~= '' then
+                        local key = zonematch.normalize(name):gsub('^%s+', ''):gsub('%s+$', '')
+                        local row = missing[key] or { name = name, quests = {} }
+
+                        row.quests[#row.quests + 1] = quest
+                        missing[key] = row
+                    end
+                end
+            end
+        end
+
+        local wanted = {}
+
+        for key in pairs(missing) do
+            wanted[key] = true
+        end
+
+        local ok, live = pcall(M.compass.ScanMany, api, wanted, me)
+        local rows = {}
+
+        if not ok or type(live) ~= 'table' then
+            lines[#lines + 1] = '[Journal] 近くのNPCを読めませんでした。'
+            return rows
+        end
+
+        local named = 0
+
+        for key, row in pairs(missing) do
+            local found = live[key]
+
+            if found ~= nil and found.x ~= nil then
+                named = named + 1
+                local dx = me.x - found.x
+                local dy = me.z - found.z
+                local distance = math.sqrt(dx * dx + dy * dy)
+
+                rows[#rows + 1] = {
+                    name = row.name,
+                    x = found.x,
+                    y = found.z,
+                    quests = row.quests,
+                }
+                lines[#lines + 1] = string.format(
+                    '[Journal] 見えています: %s 約%.0f。クエスト %d 件。',
+                    row.name,
+                    distance,
+                    #row.quests
+                )
+            end
+        end
+
+        if named == 0 then
+            lines[#lines + 1] = '[Journal] 今読み込まれているCatsEyeのNPCはありません。'
+        end
+
+        return rows
+    end
+
+    function M.ProximityDebug()
+        return prox.debug_lines or {
+            '[Journal] まだ測っていません。街を少し歩くと更新されます。',
+        }
     end
 
     -- The quests of the NPC that are not started, { { name =, id = } }, or
@@ -7076,11 +7130,24 @@ do
         end
 
         for _, quest in ipairs(row.quests) do
-            local open = quest.chat_track
-                and M.world_lock.status_of(quest) == 'not_started'
-                or (not quest.chat_track
-                    and tracker.GetQuestStatus(quest.tracker_area, quest.tracker_id) == 'not_started'
-                    and M.world_lock.available(quest.id))
+            local open = false
+
+            if quest.chat_track then
+                local status = M.world_lock.status_of(quest)
+
+                if status == 'not_started' then
+                    open = M.world_lock.available(quest.id)
+                else
+                    open = require('catseye_track').shows_nearby(
+                        status,
+                        quest.repeatable == true,
+                        hide_complete_quests
+                    )
+                end
+            else
+                open = tracker.GetQuestStatus(quest.tracker_area, quest.tracker_id) == 'not_started'
+                    and M.world_lock.available(quest.id)
+            end
 
             if not seen[quest.id] and open then
 
@@ -7096,7 +7163,8 @@ do
             for _, quest in ipairs(row.quests) do
                 if not seen[quest.id]
                     and quest.repeatable == true
-                    and M.world_lock.status_of(quest) == 'completed' then
+                    and M.world_lock.status_of(quest) == 'completed'
+                    and not (quest.chat_track and hide_complete_quests) then
 
                     seen[quest.id] = true
                     list[#list + 1] = {
@@ -7122,7 +7190,7 @@ do
     function prox.sync_compass(zone, me)
         local cands = {}
 
-        for _, row in ipairs(prox.list) do
+        for _, row in ipairs(prox.rows or prox.list) do
             local dx = me.x - row.x
             local dy = me.z - row.y
             local d2 = dx * dx + dy * dy
@@ -7219,6 +7287,27 @@ do
             prox.list = build(zone)
         end
 
+        prox.rows = {}
+
+        for _, row in ipairs(prox.list) do
+            prox.rows[#prox.rows + 1] = row
+        end
+
+        for _, row in ipairs(prox.live_rows(api, me)) do
+            local have = false
+
+            for _, old in ipairs(prox.list) do
+                if zonematch.normalize(old.name) == zonematch.normalize(row.name) then
+                    have = true
+                    break
+                end
+            end
+
+            if not have then
+                prox.rows[#prox.rows + 1] = row
+            end
+        end
+
         if announce.prox_compass then
             prox.sync_compass(zone, me)
         end
@@ -7235,26 +7324,24 @@ do
         -- close to each other do not make separate alerts.
         local found = {}
 
-        for _, row in ipairs(prox.list) do
+        for _, row in ipairs(prox.rows or prox.list) do
             local dx = me.x - row.x
             local dy = me.z - row.y
             local d2 = dx * dx + dy * dy
 
             if not prox.shown[row.name] and d2 <= PROX_RADIUS * PROX_RADIUS then
+                local picked = prox.start_names(row, true) or {}
                 local names = {}
                 local seen = {}
 
-                for _, quest in ipairs(row.quests) do
-                    local key = tostring(quest.tracker_area) .. '_' .. tostring(quest.tracker_id)
+                for _, quest in ipairs(picked) do
+                    local key = tostring(quest.id)
 
-                    if not seen[key] and tracker.GetQuestStatus(
-                        quest.tracker_area, quest.tracker_id) == 'not_started'
-                        and M.world_lock.available(quest.id) then
-
+                    if not seen[key] then
                         seen[key] = true
                         names[#names + 1] = i18n.step(quest.name, {
                             kind = 'quest',
-                            area = quest.tracker_area or quest.category,
+                            area = 'catseye',
                             id = quest.id,
                         })
                     end

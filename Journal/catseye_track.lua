@@ -188,6 +188,20 @@ function M.on_text(message, zone)
     return nil
 end
 
+-- Nearby compass and the alert. Completed stays hidden, unless it is
+-- repeatable and the player is not hiding completed quests.
+function M.shows_nearby(status, repeatable, hide_complete)
+    if status == 'active' or status == 'not_started' then
+        return true
+    end
+
+    if status == 'completed' then
+        return repeatable == true and hide_complete ~= true
+    end
+
+    return false
+end
+
 function M.unknown_rows()
     local rows = {}
 

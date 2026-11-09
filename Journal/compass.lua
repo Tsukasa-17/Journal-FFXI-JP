@@ -642,7 +642,7 @@ function M.ScanMany(api, wanted, me)
         local name = api.name(index)
 
         if name ~= nil and name ~= '' then
-            local key = zonematch.normalize(name)
+            local key = zonematch.normalize(name):gsub('^%s+', ''):gsub('%s+$', '')
 
             if wanted[key] then
                 local x, z = api.pos(index)

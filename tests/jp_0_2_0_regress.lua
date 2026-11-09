@@ -324,6 +324,13 @@ local soil = { name = 'Horutoto Hakken', complete_zone = 248, complete_on = hakk
 track.on_text('Quest Accepted: Horutoto Hakken', 192)
 check('any soil piece completes', track.on_text('大地の脚絆を手にいれた！', 248).action == 'completed')
 check('npcpos line', require('npcpos').format_entry('Aeolia', 230, 1.5, -2, 0.25) == '["Aeolia"] = { { 230, 1.50, -2.00, 0.25 } },')
+check('aeolia has no fixed position', positions['Aeolia'] == nil and positions['Moyeyo'] == nil)
+local near = require('catseye_track')
+check('nearby not started', near.shows_nearby('not_started', false, true) == true)
+check('nearby active', near.shows_nearby('active', false, true) == true)
+check('nearby completed hidden', near.shows_nearby('completed', false, false) == false)
+check('nearby repeatable hidden', near.shows_nearby('completed', true, true) == false)
+check('nearby repeatable shown', near.shows_nearby('completed', true, false) == true)
 
 local function blank_packet(length)
     return string.rep('\0', length)
