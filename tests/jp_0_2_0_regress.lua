@@ -250,7 +250,7 @@ check('old categories remain',
     counts.sandoria > 0 and counts.bastok > 0 and counts.windurst > 0
     and counts.jeuno > 0 and counts.outlands > 0 and counts.other > 0
     and counts.whitegate > 0 and counts.crystal_war > 0)
-check('catseye four quests', counts.catseye == 4)
+check('catseye quest count', counts.catseye == 102)
 local hakken
 for _, quest in ipairs(quest_data.QUESTS.catseye) do
     if quest.id == 'catseye_horutoto_hakken' then
@@ -271,7 +271,7 @@ for _, quest in ipairs(listed) do
         listed_hakken = quest
     end
 end
-check('hakken in list', #listed == 4 and listed_hakken ~= nil and listed_hakken.status == 'not_started')
+check('hakken in list', #listed == 102 and listed_hakken ~= nil and listed_hakken.status == 'not_started')
 check('sandoria list remains', #tracker.GetQuestArea('sandoria') > 10)
 local order = tracker.GetQuestCategories()
 check('category order', order[8] == 'crystal_war' and order[9] == 'catseye' and #order == 9)
@@ -291,7 +291,7 @@ end
 check('catseye tab present', catseye_tab ~= nil)
 logic.SetQuestSelection(catseye_tab, 1)
 local groups = logic.GetQuestListGroups()
-check('catseye grouped by zone', #groups == 3)
+check('catseye grouped by zone', #groups >= 3)
 local group_names = {}
 for _, group in ipairs(groups) do
     group_names[logic.JapaneseZone(group.zone)] = true

@@ -2215,7 +2215,9 @@ local function draw_metadata(selected)
                     colors.text_dim,
                     field[1] .. tostring(controller.JapaneseZone(field[2]))
                 )
-            elseif field[1] == tx('Items: ') then
+            elseif field[1] == tx('Items: ')
+                or field[1] == tx('Requires: ')
+                or field[1] == tx('Location: ') then
                 richtext.draw_wrapped(
                     field[1] .. tostring(i18n.step(tostring(field[2]))),
                     {
