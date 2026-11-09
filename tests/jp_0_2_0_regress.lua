@@ -320,17 +320,74 @@ check('dump needs two snaps', dump.changes('missing', 'after') == nil)
 local saved_addon = addon
 addon = { path = '/tmp/ashita-root/addons/Journal/', name = 'Journal' }
 check('dump config outside addon', dump.config_dir() == '/tmp/ashita-root/config/addons/Journal')
+addon = {
+    path = 'C:/Games/CatsEyeXI/catseyexi-client/Vanacore/addons/vanacore/Journal/',
+    name = 'Journal',
+}
+local vanacore_dirs = dump.candidate_dirs()
+local saw_config, saw_addon = false, false
+for _, dir in ipairs(vanacore_dirs) do
+    if dir == 'C:/Games/CatsEyeXI/catseyexi-client/Vanacore/config/addons/Journal' then
+        saw_config = true
+    end
+    if dir == 'C:/Games/CatsEyeXI/catseyexi-client/Vanacore/addons/vanacore/Journal' then
+        saw_addon = true
+    end
+end
+check('vanacore config dir', saw_config)
+check('vanacore addon fallback', saw_addon)
 local report_dir = '/tmp/journal-questdump-test'
 os.execute('mkdir -p ' .. report_dir)
 os.remove(report_dir .. '/questdump.txt')
-local written = dump.write_report(report_dir, 'テスト\n')
+local written = dump.write_report('テスト\n', { report_dir })
 check('dump writes report', written == report_dir .. '/questdump.txt')
 local report = io.open(written, 'r')
 local report_text = report:read('*a')
 report:close()
 check('dump report text', report_text:find('テスト', 1, true) ~= nil)
 os.remove(written)
+local bad_path, bad_err = dump.write_report('x', { '/etc/passwd/journal-questdump' })
+check('dump reports save error', bad_path == nil and type(bad_err) == 'string' and bad_err:find('questdump.txt', 1, true) ~= nil)
 addon = saved_addon
+
+local function packet_05c(nums)
+    local packet = blank_packet(0x24)
+    for index, value in ipairs(nums) do
+        local n = value
+        if n < 0 then
+            n = n + 4294967296
+        end
+        local offset = 0x04 + (index - 1) * 4
+        for _ = 0, 3 do
+            packet = set_byte(packet, offset, n % 256)
+            n = math.floor(n / 256)
+            offset = offset + 1
+        end
+    end
+    return packet
+end
+
+dump.reset()
+dump.set_enabled(true)
+dump.on_packet({ id = 0x056, data = packet_056(0x0070, { 1 }) })
+dump.on_packet({ id = 0x017, data = 'hello' })
+local first_lines = dump.handle({ '/journal', 'questdump', 'snap', 'one' })
+local first_text = table.concat(first_lines, '\n')
+check('dump counts since on', first_text:find('0x056 は開始から 1、前回の snap から 1', 1, true) ~= nil)
+check('dump lists other packets', first_text:find('0x017 x1', 1, true) ~= nil)
+dump.on_packet({ id = 0x056, data = packet_056(0x0070, { 1, 2 }) })
+local second_lines = dump.handle({ '/journal', 'questdump', 'snap', 'two' })
+local second_text = table.concat(second_lines, '\n')
+check('dump counts since snap', second_text:find('0x056 は開始から 2、前回の snap から 1', 1, true) ~= nil)
+check('dump says log arrived', second_text:find('クエストログ（0x056）は届いていません', 1, true) == nil)
+local kept = dump.changes('one', 'two')
+check('dump snap keeps earlier bits', table.concat(kept.lines, '\n'):find('0x056 種別 0x00000070 ビット 2: オフ → オン', 1, true) ~= nil)
+dump.on_packet({ id = 0x05C, data = packet_05c({ 0, 0, 0, 0, 0, 0, 0, 0 }) })
+dump.snapshot('c1')
+dump.on_packet({ id = 0x05C, data = packet_05c({ 0, 0, 4, 0, 0, 0, 0, 0 }) })
+dump.snapshot('c2')
+local event = dump.changes('c1', 'c2')
+check('dump event number', table.concat(event.lines, '\n'):find('0x05C 数値 2: 0 → 4', 1, true) ~= nil)
 dump.reset()
 check('dump off again', dump.is_enabled() == false)
 
