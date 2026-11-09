@@ -10,7 +10,8 @@
 
 この日本語版は、Kxteel氏が作った Journal をもとにしています。ミッションとクエストをゲームの中で追えるようにしてくださったことに、感謝しています。
 
-トラッカーの表示は、[hando](https://github.com/handomade)（handomade）さんの寄稿です。
+協力者: [hando](https://github.com/handomade)（handomade）さん
+開発にご協力いただき、ありがとうございます。
 
 オリジナルのページ: [Kxteel/ffxi-journal](https://github.com/Kxteel/ffxi-journal)
 

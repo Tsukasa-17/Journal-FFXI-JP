@@ -241,7 +241,7 @@ check('invalid load keeps position fields', logic.GetJournalWindowState().x == 1
 local credit = require('jp_credit')
 check('jp credit 0.3.0', credit.version == '0.3.0' and credit.display('0.3.4'):find('0.3.4', 1, true) ~= nil)
 check('jp credit keeps tsukasa', credit.display('0.3.4'):find('[jpver 0.3.0 by Tsukasa]', 1, true) ~= nil)
-check('jp contributor hando', credit.contributor_line:find('hando', 1, true) ~= nil)
+check('jp contributor hando', credit.contributor_line:find('協力者: hando', 1, true) ~= nil)
 local journal_src = io.open('/workspace/Journal/journal.lua'):read('*a')
 check('addon version 0.3.4', journal_src:find("addon.version = '0.3.4'", 1, true) ~= nil)
 check('addon author kxteel', journal_src:find("addon.author  = 'Kxteel'", 1, true) ~= nil)
