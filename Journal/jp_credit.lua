@@ -1,5 +1,5 @@
 -- Original metadata stays parse-compatible; Japanese derivative credit lives here.
-local M={version='0.2.2',name='Tsukasa'}
+local M={version='0.3.0',name='Tsukasa'}
 M.suffix='[jpver '..M.version..' by '..M.name..']'
 M.author='Kxteel '..M.suffix
 M.contributor='hando'

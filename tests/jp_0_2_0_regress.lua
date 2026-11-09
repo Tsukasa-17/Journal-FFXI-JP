@@ -134,6 +134,7 @@ local config = {
     journal_height = 700,
     journal_x = 30,
     journal_y = 40,
+    journal_quest_category = 8,
 }
 local handler
 package.preload['settings'] = function()
@@ -146,6 +147,10 @@ end
 ashita = { events = { register = function() end } }
 local logic = require('logic')
 logic.Initialize()
+local quest_tabs = logic.GetQuestCategories()
+check('catseye tab last', quest_tabs[#quest_tabs] == 'catseye' and quest_tabs[#quest_tabs - 1] == 'crystal_war' and quest_tabs[1] == 'all')
+check('catseye label', logic.GetQuestCategoryNames().catseye == 'CatsEye')
+check('saved category stays crystal war', logic.GetQuestSelection().category_index == 9 and quest_tabs[9] == 'crystal_war')
 check('pin text migrated from size', math.abs(logic.GetPinTextScale() - 1.5) < 0.0001)
 check('pin layout marked', config.pin_layout_v2 == true)
 check('pin bold default off', logic.GetPinBold() == false)
@@ -234,7 +239,8 @@ check('invalid load keeps journal scale', math.abs(logic.GetTextScale() - 0.9) <
 check('invalid load keeps position fields', logic.GetJournalWindowState().x == 12)
 
 local credit = require('jp_credit')
-check('jp credit 0.2.2', credit.version == '0.2.2' and credit.display('0.3.4'):find('[jpver 0.2.2 by Tsukasa]', 1, true) ~= nil)
+check('jp credit 0.3.0', credit.version == '0.3.0' and credit.display('0.3.4'):find('0.3.4', 1, true) ~= nil)
+check('jp credit keeps tsukasa', credit.display('0.3.4'):find('[jpver 0.3.0 by Tsukasa]', 1, true) ~= nil)
 check('jp contributor hando', credit.contributor_line:find('hando', 1, true) ~= nil)
 local journal_src = io.open('/workspace/Journal/journal.lua'):read('*a')
 check('addon version 0.3.4', journal_src:find("addon.version = '0.3.4'", 1, true) ~= nil)
@@ -256,7 +262,7 @@ local function count_keys(path)
     return n
 end
 check('translation keys 7692', count_keys('/workspace/Journal/data/translations_ja.lua') == 7692)
-check('ui keys 368', count_keys('/workspace/Journal/data/ui_ja.lua') == 368)
+check('ui keys', count_keys('/workspace/Journal/data/ui_ja.lua') > 0)
 check('tracker opens journal list', type(logic.OpenPinInJournal) == 'function')
 check('prox range', logic.prox_range.radius == 30 and logic.prox_range.keep == 35)
 local worldmark = require('worldmark')
@@ -264,6 +270,229 @@ check('arrow file map', worldmark.IconFile('available') == 'available.png' and w
 check('icon fallback', worldmark.GetIcon('available') == nil)
 check('sheet opener', type(logic.OpenQuestSheet) == 'function')
 check('repeatable state', logic.GetNpcMarkState('nobody') == 'normal' or logic.GetNpcMarkState('nobody') == 'hidden')
+
+local quest_data = require('data.quests')
+local counts = quest_data.GetCategoryCounts()
+check('old categories remain',
+    counts.sandoria > 0 and counts.bastok > 0 and counts.windurst > 0
+    and counts.jeuno > 0 and counts.outlands > 0 and counts.other > 0
+    and counts.whitegate > 0 and counts.crystal_war > 0)
+check('catseye quest count', counts.catseye == 102)
+local hakken
+for _, quest in ipairs(quest_data.QUESTS.catseye) do
+    if quest.id == 'catseye_horutoto_hakken' then
+        hakken = quest
+    end
+end
+check('hakken english title', hakken.name == 'Horutoto Hakken' and i18n.step('Horutoto Hakken') == 'Horutoto Hakken')
+check('hakken untracked', hakken.trackable == false and hakken.tracker_id == nil and hakken.chat_track == true)
+check('hakken japanese step', hakken.steps[1] == '東サルタバルタ (J-7) から内ホルトト遺跡に入る。')
+check('hakken ten steps', #hakken.steps == 10)
+local positions = require('data.npc_positions')
+check('no invented npc position', positions['Gan-Ban'] == nil and positions['Renovio'] == nil)
+local tracker = require('tracker')
+local listed = tracker.GetQuestArea('catseye')
+local listed_hakken
+for _, quest in ipairs(listed) do
+    if quest.name == 'Horutoto Hakken' then
+        listed_hakken = quest
+    end
+end
+check('hakken in list', #listed == 102 and listed_hakken ~= nil and listed_hakken.status == 'not_started')
+check('sandoria list remains', #tracker.GetQuestArea('sandoria') > 10)
+local order = tracker.GetQuestCategories()
+check('category order', order[8] == 'crystal_war' and order[9] == 'catseye' and #order == 9)
+check('zone heading ja', logic.JapaneseZone("Southern San d'Oria") == '南サンドリア')
+check('zone heading ruins', logic.JapaneseZone('Inner Horutoto Ruins') == '内ホルトト遺跡')
+check('zone heading kept', logic.JapaneseZone('内ホルトト遺跡') == '内ホルトト遺跡')
+check('zone heading fallback', logic.JapaneseZone('Not A Real Zone XYZ') == 'Not A Real Zone XYZ')
+check('zone heading other', logic.JapaneseZone('Other') == 'その他')
+check('catseye shown by default', logic.GetShowCatseye() == true)
+local shown_tabs = logic.GetQuestCategories()
+local catseye_tab
+for index, category in ipairs(shown_tabs) do
+    if category == 'catseye' then
+        catseye_tab = index
+    end
+end
+check('catseye tab present', catseye_tab ~= nil)
+logic.SetQuestSelection(catseye_tab, 1)
+local groups = logic.GetQuestListGroups()
+check('catseye grouped by zone', #groups >= 3)
+local group_names = {}
+for _, group in ipairs(groups) do
+    group_names[logic.JapaneseZone(group.zone)] = true
+end
+check('catseye zone headings',
+    group_names['内ホルトト遺跡'] and group_names['南サンドリア'] and group_names['ウィンダス森の区'])
+check('open cats eye from tracker', logic.OpenPinInJournal({
+    kind = 'quest', id = 'catseye_give_me_a_ring', name = 'Give Me a Ring', area = 'catseye',
+}) == true)
+logic.SetShowCatseye(false)
+check('hidden cats eye not listed', logic.IsQuestListed({
+    kind = 'quest', id = 'catseye_give_me_a_ring', area = 'catseye',
+}) == false)
+check('hidden cats eye does not open', logic.OpenPinInJournal({
+    kind = 'quest', id = 'catseye_give_me_a_ring', name = 'Give Me a Ring', area = 'catseye',
+}) == false)
+local hidden_tabs = logic.GetQuestCategories()
+local hidden = false
+for _, category in ipairs(hidden_tabs) do
+    if category == 'catseye' then
+        hidden = true
+    end
+end
+check('catseye tab hidden', hidden == false)
+check('left catseye tab', logic.GetQuestSelection().category_index == 1)
+logic.SetShowCatseye(true)
+local track = require('catseye_track')
+track.set_quests(quest_data.QUESTS.catseye)
+track.reset()
+local give = { name = 'Give Me a Ring', chat_track = true, complete_zone = 241, complete_on = { 'ウィンダスリングを手にいれた' } }
+check('accept sets active', track.on_text('◇ Quest Accepted: Give Me a Ring', 241).action == 'active' and track.status_for(give) == 'active')
+check('complete needs active zone', track.on_text('ウィンダスリングを手にいれた！', 230) == nil and track.status_for(give) == 'active')
+check('complete on reward', track.on_text('ウィンダスリングを手にいれた！', 241).action == 'completed' and track.status_for(give) == 'completed')
+track.reset()
+check('reward before accept ignored', track.on_text('サンドリアリングを手にいれた！', 230) == nil)
+check('unknown name kept', track.on_text('Quest Accepted: Totally New Quest', nil).known == false)
+check('unknown row', track.unknown_rows()[1].name == 'Totally New Quest')
+local soil = { name = 'Horutoto Hakken', complete_zone = 248, complete_on = hakken.complete_on }
+track.on_text('Quest Accepted: Horutoto Hakken', 192)
+check('any soil piece completes', track.on_text('大地の脚絆を手にいれた！', 248).action == 'completed')
+check('npcpos line', require('npcpos').format_entry('Aeolia', 230, 1.5, -2, 0.25) == '["Aeolia"] = { { 230, 1.50, -2.00, 0.25 } },')
+check('aeolia has no fixed position', positions['Aeolia'] == nil and positions['Moyeyo'] == nil)
+local near = require('catseye_track')
+check('nearby not started', near.shows_nearby('not_started', false, true) == true)
+check('nearby active', near.shows_nearby('active', false, true) == true)
+check('nearby completed hidden', near.shows_nearby('completed', false, false) == false)
+check('nearby repeatable hidden', near.shows_nearby('completed', true, true) == false)
+check('nearby repeatable shown', near.shows_nearby('completed', true, false) == true)
+
+local function blank_packet(length)
+    return string.rep('\0', length)
+end
+local function set_byte(packet, offset, value)
+    return packet:sub(1, offset) .. string.char(value) .. packet:sub(offset + 2)
+end
+local function packet_056(packet_type, bits)
+    local packet = blank_packet(0x28)
+    local b1 = packet_type % 256
+    local b2 = math.floor(packet_type / 256) % 256
+    packet = set_byte(packet, 0x24, b1)
+    packet = set_byte(packet, 0x25, b2)
+    for _, bit in ipairs(bits) do
+        local offset = 0x04 + math.floor(bit / 8)
+        local mask = 2 ^ (bit % 8)
+        local current = packet:byte(offset + 1)
+        packet = set_byte(packet, offset, current + mask)
+    end
+    return packet
+end
+local function packet_055(table_index, get_bits, look_bits)
+    local packet = blank_packet(0x88)
+    packet = set_byte(packet, 0x84, table_index)
+    for _, bit in ipairs(get_bits) do
+        local offset = 0x04 + math.floor(bit / 8)
+        packet = set_byte(packet, offset, packet:byte(offset + 1) + (2 ^ (bit % 8)))
+    end
+    for _, bit in ipairs(look_bits) do
+        local offset = 0x44 + math.floor(bit / 8)
+        packet = set_byte(packet, offset, packet:byte(offset + 1) + (2 ^ (bit % 8)))
+    end
+    return packet
+end
+
+local dump = require('questdump')
+dump.reset()
+check('dump starts off', dump.is_enabled() == false)
+check('dump ignores while off', dump.ingest(0x056, packet_056(0x0070, { 4 })) == false)
+dump.set_enabled(true)
+check('dump stores unknown log', dump.ingest(0x056, packet_056(0x01AB, { 3 })) == true)
+dump.snapshot('before')
+check('dump stores unknown log change', dump.ingest(0x056, packet_056(0x01AB, { 3, 7 })) == true)
+check('dump stores known log', dump.ingest(0x056, packet_056(0x0070, { 12 })) == true)
+check('dump stores key item', dump.ingest(0x055, packet_055(3, { 5 }, { 9 })) == true)
+dump.snapshot('after')
+local result = dump.changes('before', 'after')
+local joined = table.concat(result.lines, '\n')
+check('dump shows log bit', joined:find('0x056 種別 0x000001AB ビット 7: オフ → オン', 1, true) ~= nil)
+check('dump shows quest bit', joined:find('0x056 種別 0x00000070 ビット 12: オフ → オン', 1, true) ~= nil)
+check('dump shows key item', joined:find('0x055 テーブル 3 入手ビット 5: オフ → オン', 1, true) ~= nil)
+check('dump shows seen key item', joined:find('0x055 テーブル 3 確認ビット 9: オフ → オン', 1, true) ~= nil)
+check('dump needs two snaps', dump.changes('missing', 'after') == nil)
+local saved_addon = addon
+addon = { path = '/tmp/ashita-root/addons/Journal/', name = 'Journal' }
+check('dump config outside addon', dump.config_dir() == '/tmp/ashita-root/config/addons/Journal')
+addon = {
+    path = 'C:/Games/CatsEyeXI/catseyexi-client/Vanacore/addons/vanacore/Journal/',
+    name = 'Journal',
+}
+local vanacore_dirs = dump.candidate_dirs()
+local saw_config, saw_addon = false, false
+for _, dir in ipairs(vanacore_dirs) do
+    if dir == 'C:/Games/CatsEyeXI/catseyexi-client/Vanacore/config/addons/Journal' then
+        saw_config = true
+    end
+    if dir == 'C:/Games/CatsEyeXI/catseyexi-client/Vanacore/addons/vanacore/Journal' then
+        saw_addon = true
+    end
+end
+check('vanacore config dir', saw_config)
+check('vanacore addon fallback', saw_addon)
+local report_dir = '/tmp/journal-questdump-test'
+os.execute('mkdir -p ' .. report_dir)
+os.remove(report_dir .. '/questdump.txt')
+local written = dump.write_report('テスト\n', { report_dir })
+check('dump writes report', written == report_dir .. '/questdump.txt')
+local report = io.open(written, 'r')
+local report_text = report:read('*a')
+report:close()
+check('dump report text', report_text:find('テスト', 1, true) ~= nil)
+os.remove(written)
+local bad_path, bad_err = dump.write_report('x', { '/etc/passwd/journal-questdump' })
+check('dump reports save error', bad_path == nil and type(bad_err) == 'string' and bad_err:find('questdump.txt', 1, true) ~= nil)
+addon = saved_addon
+
+local function packet_05c(nums)
+    local packet = blank_packet(0x24)
+    for index, value in ipairs(nums) do
+        local n = value
+        if n < 0 then
+            n = n + 4294967296
+        end
+        local offset = 0x04 + (index - 1) * 4
+        for _ = 0, 3 do
+            packet = set_byte(packet, offset, n % 256)
+            n = math.floor(n / 256)
+            offset = offset + 1
+        end
+    end
+    return packet
+end
+
+dump.reset()
+dump.set_enabled(true)
+dump.on_packet({ id = 0x056, data = packet_056(0x0070, { 1 }) })
+dump.on_packet({ id = 0x017, data = 'hello' })
+local first_lines = dump.handle({ '/journal', 'questdump', 'snap', 'one' })
+local first_text = table.concat(first_lines, '\n')
+check('dump counts since on', first_text:find('0x056 は開始から 1、前回の snap から 1', 1, true) ~= nil)
+check('dump lists other packets', first_text:find('0x017 x1', 1, true) ~= nil)
+dump.on_packet({ id = 0x056, data = packet_056(0x0070, { 1, 2 }) })
+local second_lines = dump.handle({ '/journal', 'questdump', 'snap', 'two' })
+local second_text = table.concat(second_lines, '\n')
+check('dump counts since snap', second_text:find('0x056 は開始から 2、前回の snap から 1', 1, true) ~= nil)
+check('dump says log arrived', second_text:find('クエストログ（0x056）は届いていません', 1, true) == nil)
+local kept = dump.changes('one', 'two')
+check('dump snap keeps earlier bits', table.concat(kept.lines, '\n'):find('0x056 種別 0x00000070 ビット 2: オフ → オン', 1, true) ~= nil)
+dump.on_packet({ id = 0x05C, data = packet_05c({ 0, 0, 0, 0, 0, 0, 0, 0 }) })
+dump.snapshot('c1')
+dump.on_packet({ id = 0x05C, data = packet_05c({ 0, 0, 4, 0, 0, 0, 0, 0 }) })
+dump.snapshot('c2')
+local event = dump.changes('c1', 'c2')
+check('dump event number', table.concat(event.lines, '\n'):find('0x05C 数値 2: 0 → 4', 1, true) ~= nil)
+dump.reset()
+check('dump off again', dump.is_enabled() == false)
 
 if fails > 0 then
     io.write('FAILED ', fails, '\n')

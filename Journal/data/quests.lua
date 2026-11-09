@@ -47,6 +47,7 @@ local quest_steps = {
     other = load_step_file('data/quests/steps/other'),
     whitegate = load_step_file('data/quests/steps/whitegate'),
     crystal_war = load_step_file('data/quests/steps/crystal'),
+    catseye = load_step_file('data/quests/steps/catseye'),
 }
 
 local function apply_steps(quest, step_data)
@@ -160,6 +161,7 @@ M.QUESTS = {
     other = load_quest_file('data/quests/other', 'other'),
     whitegate = load_quest_file('data/quests/whitegate', 'whitegate'),
     crystal_war = load_quest_file('data/quests/crystal', 'crystal_war'),
+    catseye = load_quest_file('data/quests/catseye', 'catseye'),
 }
 
 function M.GetCategoryCounts()

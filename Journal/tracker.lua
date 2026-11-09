@@ -17,6 +17,7 @@ local quest_categories = {
     'other',
     'whitegate',
     'crystal_war',
+    'catseye',
 }
 
 local quest_category_names = {
@@ -28,6 +29,7 @@ local quest_category_names = {
     other = 'Other',
     whitegate = 'Whitegate',
     crystal_war = 'Crystal War',
+    catseye = 'CatsEye',
 }
 
 -- The server's quest areas do not always match Journal categories.

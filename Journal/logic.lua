@@ -206,7 +206,25 @@ local mission_area_names = {
 }
 
 local function get_quest_categories()
-    return tracker.GetQuestCategories()
+    local source = tracker.GetQuestCategories()
+
+    if M.show_catseye ~= false then
+        return source
+    end
+
+    if M._hidden_categories == nil then
+        local list = {}
+
+        for _, category in ipairs(source) do
+            if category ~= 'catseye' then
+                list[#list + 1] = category
+            end
+        end
+
+        M._hidden_categories = list
+    end
+
+    return M._hidden_categories
 end
 
 local function get_quest_category_names()
@@ -226,10 +244,11 @@ local function get_quest_categories_view()
     end
 
     if source ~= quest_categories_source
+        or quest_categories_view.flag ~= (M.show_catseye ~= false)
         or #quest_categories_view ~= #source + 1 then
 
         quest_categories_source = source
-        quest_categories_view = { 'all' }
+        quest_categories_view = { 'all', flag = (M.show_catseye ~= false) }
 
         for _, category in ipairs(source) do
             quest_categories_view[#quest_categories_view + 1] = category
@@ -253,7 +272,28 @@ local function get_quest_category_names_view()
 end
 
 local function get_quest_list_from_tracker(category)
-    return tracker.GetQuestArea(category) or {}
+    local list = tracker.GetQuestArea(category) or {}
+
+    if category ~= 'catseye' then
+        return list
+    end
+
+    local track = require('catseye_track')
+    local copy = {}
+
+    for _, quest in ipairs(list) do
+        if quest.chat_track then
+            quest.status = track.status_for(quest)
+        end
+
+        copy[#copy + 1] = quest
+    end
+
+    for _, extra in ipairs(track.unknown_rows()) do
+        copy[#copy + 1] = extra
+    end
+
+    return copy
 end
 
 -- Journal state
@@ -895,6 +935,9 @@ local function apply_config_part_two()
     show_not_started_missions = config.show_not_started_missions ~= false
     show_not_started_quests = config.show_not_started_quests ~= false
     only_repeatable_quests = config.only_repeatable_quests == true
+    M.show_catseye = config.show_catseye ~= false
+    M._hidden_categories = nil
+    require('catseye_track').import(config.catseye_progress)
 
     mission_status_cache = config.mission_status or {}
     quest_status_cache = config.quest_status or {}
@@ -1086,6 +1129,8 @@ local function update_config_values()
     config.show_not_started_missions = show_not_started_missions
     config.show_not_started_quests = show_not_started_quests
     config.only_repeatable_quests = only_repeatable_quests
+    config.show_catseye = M.show_catseye ~= false
+    config.catseye_progress = require('catseye_track').export()
     config.mission_status = mission_status_cache
     config.quest_status = quest_status_cache
 end
@@ -1285,13 +1330,13 @@ end
 local function get_active_quests()
     local result = {}
 
-    if not tracker_is_ready() then
-        return result
-    end
-
     for _, category in ipairs(get_quest_categories()) do
         for _, quest in ipairs(get_quest_list_from_tracker(category)) do
-            if quest.id ~= nil
+            if quest.chat_track
+                and require('catseye_track').status_for(quest) == 'active' then
+
+                result[#result + 1] = quest
+            elseif quest.id ~= nil
                 and quest.trackable ~= false
                 and quest.tracker_area ~= nil
                 and quest.tracker_id ~= nil then
@@ -1478,6 +1523,7 @@ local function build_quest_link_index()
                     tracker_area = quest.tracker_area,
                     tracker_id = quest.tracker_id,
                     repeatable = quest.repeatable == true,
+                    chat_track = quest.chat_track == true,
                 }
 
                 index.names[#index.names + 1] = {
@@ -2199,6 +2245,44 @@ local function quest_zone_label(quest)
     end
 
     return zone
+end
+
+-- The Japanese zone name used for list headings and the details line.
+-- Grouping stays on the original text, so the order does not change.
+function M.JapaneseZone(name)
+    name = tostring(name or '')
+
+    if name == '' then
+        return name
+    end
+
+    if name == 'Other' then
+        return 'その他'
+    end
+
+    local stepped = i18n.step(name)
+
+    if stepped ~= name then
+        return stepped
+    end
+
+    if M._zone_ja == nil then
+        local map = {}
+
+        for _, row in pairs(require('data.zones')) do
+            if type(row) == 'table'
+                and type(row.en) == 'string'
+                and type(row.ja) == 'string'
+                and row.ja ~= '' then
+
+                map[row.en] = row.ja
+            end
+        end
+
+        M._zone_ja = map
+    end
+
+    return M._zone_ja[name] or name
 end
 
 -- Zones of a category, in the order the data lists them.
@@ -4404,6 +4488,11 @@ do
         }
     end
 
+    function M.ClearSearchCache()
+        S.corpus = nil
+        S.found = nil
+    end
+
     function S.build(language)
         local entries = {}
         local order = 0
@@ -5467,6 +5556,10 @@ do
     end
 
     function M.world_lock.status_of(info)
+        if info.chat_track then
+            return require('catseye_track').status_for(info)
+        end
+
         if info.tracker_area == nil or info.tracker_id == nil then
             return 'not_started'
         end
@@ -5705,6 +5798,8 @@ do
             return lock.rows
         end
 
+        local missing = {}
+
         for _, quest in ipairs(get_active_quests()) do
             if type(quest.npc) == 'string' then
                 for part in quest.npc:gmatch('[^/]+') do
@@ -5720,6 +5815,29 @@ do
                             kind = 'quest',
                             id = quest.id,
                         }
+                    elseif quest.chat_track and name ~= '' then
+                        missing[zonematch.normalize(name)] = name
+                    end
+                end
+            end
+        end
+
+        if next(missing) ~= nil and compass_api.me ~= nil then
+            local me_ok, me = pcall(compass_api.me)
+
+            if me_ok and me ~= nil then
+                local ok, live = pcall(M.compass.ScanMany, compass_api, missing, me)
+
+                if ok and type(live) == 'table' then
+                    for key, found in pairs(live) do
+                        if found.x ~= nil then
+                            lock.rows[#lock.rows + 1] = {
+                                name = missing[key] or found.name,
+                                status = 'found',
+                                pos = { x = found.x, y = found.z },
+                                kind = 'quest',
+                            }
+                        end
                     end
                 end
             end
@@ -6234,6 +6352,8 @@ function M.HandleCommand(e)
         require('encoding').chat_print(i18n.t('/journal mark [on|off|debug] - Arrow over the NPC of the compass in the game (prototype)'))
         require('encoding').chat_print(i18n.t('/journal alert [quest|mission] [done] - Preview the alerts'))
         require('encoding').chat_print(i18n.t('/journal quest - Open Quest Journal'))
+        require('encoding').chat_print(i18n.t('/journal questdump [on|off|snap|diff|watch] - Record quest log bits (off by default)'))
+        require('encoding').chat_print(i18n.t('/journal npcpos - Save the targeted NPC position'))
         require('encoding').chat_print(i18n.t('/journal pin - Toggle pinned tracker'))
         require('encoding').chat_print(i18n.t('/journal pin add - Pin the item selected in the Journal'))
         require('encoding').chat_print(i18n.t('/journal pin remove <n> | clear - Unpin items'))
@@ -6434,6 +6554,33 @@ function M.HandleCommand(e)
             require('encoding').chat_print(i18n.t('[Journal] Usage: /journal pin [add|remove <n>|clear|mode|size|next|prev|reset|zone|auto|preview|<n>]'))
         end
 
+        return
+    end
+
+    if command == 'nearby' then
+        for _, line in ipairs(M.ProximityDebug()) do
+            require('encoding').chat_print(line)
+        end
+
+        return
+    end
+
+    if command == 'npcpos' then
+        local captured, err = require('npcpos').capture()
+
+        if captured == nil then
+            require('encoding').chat_print('[Journal] ' .. tostring(err))
+        else
+            require('encoding').chat_print('[Journal] ' .. captured.line)
+            require('encoding').chat_print('[Journal] 保存しました: ' .. tostring(captured.log_path))
+            require('encoding').chat_print('[Journal] コンパス用: ' .. tostring(captured.custom_path))
+        end
+
+        return
+    end
+
+    if command == 'questdump' or command == 'questlog' then
+        require('questdump').handle(args)
         return
     end
 
@@ -7030,13 +7177,15 @@ do
     local function build(zone)
         local by_npc = {}
         local list = {}
+        local missing = {}
 
         for _, category in ipairs(get_quest_categories()) do
             for _, quest in ipairs(get_quest_list_from_tracker(category)) do
-                if type(quest.npc) == 'string'
-                    and quest.trackable ~= false
+                local tracked = quest.trackable ~= false
                     and quest.tracker_area ~= nil
-                    and quest.tracker_id ~= nil then
+                    and quest.tracker_id ~= nil
+
+                if type(quest.npc) == 'string' and (tracked or quest.chat_track) then
 
                     for part in quest.npc:gmatch('[^/]+') do
                         local name = part:match('^%s*(.-)%s*$')
@@ -7062,6 +7211,98 @@ do
         return list
     end
 
+    -- CatsEye NPCs have no fixed coordinates. The client only loads an NPC
+    -- when it is near, so this scan runs on every proximity check, not once
+    -- per zone. Names are matched ignoring case and surrounding spaces.
+    function prox.live_rows(api, me)
+        prox.debug_lines = {}
+        local lines = prox.debug_lines
+
+        lines[#lines + 1] = M.show_catseye == false
+            and '[Journal] CatsEyeクエストを表示: オフ'
+            or '[Journal] CatsEyeクエストを表示: オン'
+
+        if M.show_catseye == false or api == nil or me == nil then
+            return {}
+        end
+
+        local missing = {}
+
+        for _, quest in ipairs(get_quest_list_from_tracker('catseye')) do
+            if quest.chat_track and type(quest.npc) == 'string'
+                and require('catseye_track').shows_nearby(
+                    require('catseye_track').status_for(quest),
+                    quest.repeatable == true,
+                    hide_complete_quests
+                ) then
+
+                for part in quest.npc:gmatch('[^/]+') do
+                    local name = part:match('^%s*(.-)%s*$')
+
+                    if name ~= '' then
+                        local key = zonematch.normalize(name):gsub('^%s+', ''):gsub('%s+$', '')
+                        local row = missing[key] or { name = name, quests = {} }
+
+                        row.quests[#row.quests + 1] = quest
+                        missing[key] = row
+                    end
+                end
+            end
+        end
+
+        local wanted = {}
+
+        for key in pairs(missing) do
+            wanted[key] = true
+        end
+
+        local ok, live = pcall(M.compass.ScanMany, api, wanted, me)
+        local rows = {}
+
+        if not ok or type(live) ~= 'table' then
+            lines[#lines + 1] = '[Journal] 近くのNPCを読めませんでした。'
+            return rows
+        end
+
+        local named = 0
+
+        for key, row in pairs(missing) do
+            local found = live[key]
+
+            if found ~= nil and found.x ~= nil then
+                named = named + 1
+                local dx = me.x - found.x
+                local dy = me.z - found.z
+                local distance = math.sqrt(dx * dx + dy * dy)
+
+                rows[#rows + 1] = {
+                    name = row.name,
+                    x = found.x,
+                    y = found.z,
+                    quests = row.quests,
+                }
+                lines[#lines + 1] = string.format(
+                    '[Journal] 見えています: %s 約%.0f。クエスト %d 件。',
+                    row.name,
+                    distance,
+                    #row.quests
+                )
+            end
+        end
+
+        if named == 0 then
+            lines[#lines + 1] = '[Journal] 今読み込まれているCatsEyeのNPCはありません。'
+        end
+
+        return rows
+    end
+
+    function M.ProximityDebug()
+        return prox.debug_lines or {
+            '[Journal] まだ測っていません。街を少し歩くと更新されます。',
+        }
+    end
+
     -- The quests of the NPC that are not started, { { name =, id = } }, or
     -- nil. With with_active the quests in progress come first, with
     -- active = true (the NPC is marked in the compass for them too).
@@ -7084,9 +7325,26 @@ do
         end
 
         for _, quest in ipairs(row.quests) do
-            if not seen[quest.id]
-                and tracker.GetQuestStatus(quest.tracker_area, quest.tracker_id) == 'not_started'
-                and M.world_lock.available(quest.id) then
+            local open = false
+
+            if quest.chat_track then
+                local status = M.world_lock.status_of(quest)
+
+                if status == 'not_started' then
+                    open = M.world_lock.available(quest.id)
+                else
+                    open = require('catseye_track').shows_nearby(
+                        status,
+                        quest.repeatable == true,
+                        hide_complete_quests
+                    )
+                end
+            else
+                open = tracker.GetQuestStatus(quest.tracker_area, quest.tracker_id) == 'not_started'
+                    and M.world_lock.available(quest.id)
+            end
+
+            if not seen[quest.id] and open then
 
                 seen[quest.id] = true
                 list[#list + 1] = {
@@ -7100,7 +7358,8 @@ do
             for _, quest in ipairs(row.quests) do
                 if not seen[quest.id]
                     and quest.repeatable == true
-                    and M.world_lock.status_of(quest) == 'completed' then
+                    and M.world_lock.status_of(quest) == 'completed'
+                    and not (quest.chat_track and hide_complete_quests) then
 
                     seen[quest.id] = true
                     list[#list + 1] = {
@@ -7126,7 +7385,7 @@ do
     function prox.sync_compass(zone, me)
         local cands = {}
 
-        for _, row in ipairs(prox.list) do
+        for _, row in ipairs(prox.rows or prox.list) do
             local dx = me.x - row.x
             local dy = me.z - row.y
             local d2 = dx * dx + dy * dy
@@ -7223,6 +7482,27 @@ do
             prox.list = build(zone)
         end
 
+        prox.rows = {}
+
+        for _, row in ipairs(prox.list) do
+            prox.rows[#prox.rows + 1] = row
+        end
+
+        for _, row in ipairs(prox.live_rows(api, me)) do
+            local have = false
+
+            for _, old in ipairs(prox.list) do
+                if zonematch.normalize(old.name) == zonematch.normalize(row.name) then
+                    have = true
+                    break
+                end
+            end
+
+            if not have then
+                prox.rows[#prox.rows + 1] = row
+            end
+        end
+
         if announce.prox_compass then
             prox.sync_compass(zone, me)
         end
@@ -7239,26 +7519,24 @@ do
         -- close to each other do not make separate alerts.
         local found = {}
 
-        for _, row in ipairs(prox.list) do
+        for _, row in ipairs(prox.rows or prox.list) do
             local dx = me.x - row.x
             local dy = me.z - row.y
             local d2 = dx * dx + dy * dy
 
             if not prox.shown[row.name] and d2 <= PROX_RADIUS * PROX_RADIUS then
+                local picked = prox.start_names(row, true) or {}
                 local names = {}
                 local seen = {}
 
-                for _, quest in ipairs(row.quests) do
-                    local key = tostring(quest.tracker_area) .. '_' .. tostring(quest.tracker_id)
+                for _, quest in ipairs(picked) do
+                    local key = tostring(quest.id)
 
-                    if not seen[key] and tracker.GetQuestStatus(
-                        quest.tracker_area, quest.tracker_id) == 'not_started'
-                        and M.world_lock.available(quest.id) then
-
+                    if not seen[key] then
                         seen[key] = true
                         names[#names + 1] = i18n.step(quest.name, {
                             kind = 'quest',
-                            area = quest.tracker_area or quest.category,
+                            area = 'catseye',
                             id = quest.id,
                         })
                     end
@@ -7473,8 +7751,136 @@ end
 
 -- Lifecycle
 
+function M.GetShowCatseye()
+    return M.show_catseye ~= false
+end
+
+function M.SetShowCatseye(value)
+    value = value ~= false
+
+    if (M.show_catseye ~= false) == value then
+        return
+    end
+
+    if not value and not all_view.quests then
+        local full = tracker.GetQuestCategories()
+
+        if full[quest_category_index] == 'catseye' then
+            all_view.quests = true
+            quest_category_index = 1
+        end
+    end
+
+    M.show_catseye = value
+    M._hidden_categories = nil
+    quest_categories_source = nil
+    quest_categories_view = {}
+    quest_link_index = nil
+    invalidate_quest_cache()
+
+    if M.ClearSearchCache ~= nil then
+        M.ClearSearchCache()
+    end
+
+    if M.world_lock ~= nil then
+        M.world_lock.rows = nil
+        M.world_lock.rows_at = -1000
+    end
+
+    validate_state()
+    request_config_save()
+end
+
+function M.IsQuestListed(entry)
+    if M.show_catseye ~= false or type(entry) ~= 'table' then
+        return true
+    end
+
+    if entry.area == 'catseye' or entry.category == 'catseye' then
+        return false
+    end
+
+    local id = tostring(entry.id or '')
+
+    return id:sub(1, 8) ~= 'catseye_'
+end
+
+function M.RefreshCatseye()
+    quest_link_index = nil
+    invalidate_quest_cache()
+
+    if M.world_lock ~= nil then
+        M.world_lock.rows = nil
+        M.world_lock.rows_at = -1000
+    end
+
+    request_config_save()
+end
+
+function M.SetCatseyeStatus(quest, status)
+    if type(quest) ~= 'table' then
+        return false
+    end
+
+    local changed = require('catseye_track').set_status(quest, status)
+
+    if changed then
+        M.RefreshCatseye()
+    end
+
+    return changed
+end
+
+function M.OnCatseyeText(message)
+    require('catseye_track').set_quests(require('data.quests').QUESTS.catseye)
+    local zone = nil
+
+    if AshitaCore ~= nil then
+        local ok, value = pcall(function()
+            return AshitaCore:GetMemoryManager():GetParty():GetMemberZone(0)
+        end)
+
+        zone = ok and tonumber(value) or nil
+    end
+
+    local result = require('catseye_track').on_text(message, zone)
+
+    if result == nil then
+        return
+    end
+
+    M.RefreshCatseye()
+
+    if M.show_catseye == false or announce.enabled == false then
+        return
+    end
+
+    if result.quest ~= nil and #announce_queue < ANNOUNCE_QUEUE_MAX then
+        announce_queue[#announce_queue + 1] = {
+            kind = 'quest',
+            id = result.quest.id,
+            name = result.quest.name,
+            steps = result.quest.steps,
+            done = result.action == 'completed',
+        }
+    end
+end
+
 function M.Initialize()
     tracker.Initialize()
+    require('questdump').install()
+    require('catseye_track').set_quests(require('data.quests').QUESTS.catseye)
+
+    if ashita ~= nil and ashita.events ~= nil and ashita.events.register ~= nil then
+        ashita.events.register('text_in', 'journal_catseye_text', function(e)
+            local message = e and (e.message or e.message_raw)
+
+            if type(message) == 'string' and message ~= '' then
+                pcall(M.OnCatseyeText, message)
+            end
+        end)
+    end
+
     apply_config()
     validate_state()
 end

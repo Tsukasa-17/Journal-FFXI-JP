@@ -30,7 +30,9 @@ function M.play(entry, controller, addon)
     if ashita.fs ~= nil and ashita.fs.exists ~= nil
         and not ashita.fs.exists(src) then
 
-        if not missing_sound[file] then
+        -- nearby_quest.wav is optional and is not in the upstream package
+        -- or this one. The alert stays silent, without a chat warning.
+        if file ~= 'nearby_quest.wav' and not missing_sound[file] then
             missing_sound[file] = true
 
             chat_print(string.format(

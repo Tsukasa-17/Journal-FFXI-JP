@@ -451,13 +451,16 @@ local function text_wrapped(color, text, id)
     })
 end
 
-local function group_by_kind(pins)
+local function group_by_kind(pins, controller)
     local groups = { mission = {}, quest = {} }
 
     for index, entry in ipairs(pins) do
         local group = groups[entry.kind]
+        local listed = controller == nil
+            or controller.IsQuestListed == nil
+            or controller.IsQuestListed(entry)
 
-        if group ~= nil then
+        if group ~= nil and listed then
             group[#group + 1] = index
         end
     end
@@ -466,8 +469,8 @@ local function group_by_kind(pins)
 end
 
 -- Missions first, then quests, each in the pinned order. Same as the tabs.
-function M.TabRow(pins)
-    local groups = group_by_kind(pins or {})
+function M.TabRow(pins, controller)
+    local groups = group_by_kind(pins or {}, controller)
     local row = {}
 
     for _, kind in ipairs(kinds) do
@@ -709,7 +712,7 @@ end
 local stack_height = nil
 
 local function draw_stack_items(controller, pins)
-    local groups = group_by_kind(pins)
+    local groups = group_by_kind(pins, controller)
 
     for _, kind in ipairs(kinds) do
         local group = groups[kind]
@@ -886,11 +889,12 @@ end
 
 local function draw_tabs(controller, pins, active)
     -- The row of tabs, with a bar between missions and quests.
-    draw_tab_row(controller, M.TabRow(pins), active)
+    draw_tab_row(controller, M.TabRow(pins, controller), active)
 
     local entry = pins[active]
 
-    if entry ~= nil then
+    if entry ~= nil
+        and (controller.IsQuestListed == nil or controller.IsQuestListed(entry)) then
         imgui.Separator()
         right_text(colors.section, i18n.t(section_labels[entry.kind] or ''))
 
