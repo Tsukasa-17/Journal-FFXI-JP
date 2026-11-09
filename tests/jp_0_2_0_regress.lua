@@ -90,12 +90,19 @@ check('tab not english prefix',
 local depth = pinned.TabSpec(pins[4], 4)
 check('tab utf8 ellipsis', depth.label:sub(-3) == '...' and depth.full == '暗き地の底より' and depth.id:find('##pin_tab_4$', 1, false) ~= nil)
 local base = pinned.LayoutScale({ scale = 1, text_scale = 1 })
-local big = pinned.LayoutScale({ scale = 1, text_scale = 1.4 })
+local big = pinned.LayoutScale({ scale = 1, text_scale = 2 })
+local wide = pinned.LayoutScale({ scale = 2, text_scale = 1 })
 local half = pinned.LayoutScale({ scale = 2, text_scale = 0.5 })
 check('tracker scale default', base.font == 16 and base.width == 420)
-check('tracker scale 140', math.abs(big.font - 22.4) < 0.001 and math.abs(big.width - 588) < 0.001)
-check('tracker scale keeps wrap ratio', math.abs((big.font / big.width) - (base.font / base.width)) < 0.0001)
-check('tracker size and text multiply', half.font == 16 and half.width == 420)
+check('tracker text 200 keeps width', big.font == 32 and big.width == 420)
+check('tracker window size keeps text', wide.font == 16 and wide.width == 840)
+check('tracker size and text independent', half.font == 8 and half.width == 840)
+check('tab english not upper',
+    pinned.TabSpec({ kind = 'quest', id = 'x', name = 'No Such Quest' }, 9).label == 'No Such Q...')
+check('tab loose case',
+    pinned.TabSpec({ kind = 'mission', id = 'x', name = "the pirates' cove" }, 1).full == '海賊たちの唄')
+check('tab loose suffix',
+    pinned.TabSpec({ kind = 'mission', id = 'x', name = "The Pirates' Cove (Bastok)" }, 1).full == '海賊たちの唄')
 
 local dw, dh, saved = wf.resolve_saved_size(nil, nil, 480, 640, 1920, 1080, 16, 240, 180)
 check('settings default', dw == 480 and dh == 640 and saved == false)
@@ -139,7 +146,20 @@ end
 ashita = { events = { register = function() end } }
 local logic = require('logic')
 logic.Initialize()
-check('pin text default', math.abs(logic.GetPinTextScale() - 1) < 0.0001)
+check('pin text migrated from size', math.abs(logic.GetPinTextScale() - 1.5) < 0.0001)
+check('pin layout marked', config.pin_layout_v2 == true)
+check('pin bold default off', logic.GetPinBold() == false)
+check('pin stack default off', logic.GetPinStackMax() == 0)
+check('pin stack low', logic.SetPinStackMax(50) == 200)
+check('pin stack high', logic.SetPinStackMax(5000) == 960)
+check('pin stack step down', logic.AdjustPinStackMax(-1) == 920)
+logic.SetPinStackMax(200)
+check('pin stack off from min', logic.AdjustPinStackMax(-1) == 0)
+check('pin stack on from off', logic.AdjustPinStackMax(1) == 200)
+check('pin stack invalid', logic.SetPinStackMax('no') == 0)
+logic.SetPinStackMax(480)
+check('pin bold on', logic.SetPinBold(true) == true and logic.GetPinState().bold == true)
+check('pin state stack', logic.GetPinState().stack_max == 480)
 check('journal scale kept', math.abs(logic.GetTextScale() - 0.79) < 0.0001)
 check('pin scale kept', math.abs(logic.GetPinScale() - 1.5) < 0.0001)
 check('prox compass default on', logic.GetProxCompass() == true)
@@ -149,7 +169,7 @@ check('journal scale independent', math.abs(logic.GetTextScale() - 0.79) < 0.000
 check('pin scale independent', math.abs(logic.GetPinScale() - 1.5) < 0.0001)
 check('prox compass untouched', logic.GetProxCompass() == true)
 check('pin text low bound', math.abs(logic.SetPinTextScale(0.2) - 0.5) < 0.0001)
-check('pin text high bound', math.abs(logic.SetPinTextScale(2) - 1.4) < 0.0001)
+check('pin text high bound', math.abs(logic.SetPinTextScale(3) - 2.0) < 0.0001)
 check('pin text 79 kept', math.abs(logic.SetPinTextScale(0.79) - 0.79) < 0.0001)
 check('pin text step', math.abs(logic.AdjustPinTextScale(1) - 0.84) < 0.0001)
 
@@ -175,11 +195,14 @@ check('saved pin text', math.abs(config.pin_text_scale - logic.GetPinTextScale()
 check('saved settings size', config.settings_width == 730 and config.settings_height == 810)
 check('saved journal scale', math.abs(config.journal_text_scale - 1.2) < 0.0001)
 check('saved prox compass', config.announce_prox_compass == true)
+check('saved pin bold', config.pin_bold == true)
+check('saved pin stack', config.pin_stack_max == 480)
 
 local other = {
     journal_text_scale = 1.1,
     pin_scale = 0.8,
     pin_text_scale = 0.55,
+    pin_layout_v2 = true,
     settings_width = 640,
     settings_height = 900,
     announce_prox_compass = false,
@@ -191,6 +214,7 @@ check('char settings size', logic.GetSettingsWindowSize() == 640)
 local _, chh = logic.GetSettingsWindowSize()
 check('char settings height', chh == 900)
 check('char pin text', math.abs(logic.GetPinTextScale() - 0.55) < 0.0001)
+check('char pin bold off', logic.GetPinBold() == false and logic.GetPinStackMax() == 0)
 check('char journal text', math.abs(logic.GetTextScale() - 1.1) < 0.0001)
 check('char prox off', logic.GetProxCompass() == false)
 
@@ -231,7 +255,8 @@ local function count_keys(path)
     return n
 end
 check('translation keys 7692', count_keys('/workspace/Journal/data/translations_ja.lua') == 7692)
-check('ui keys 362', count_keys('/workspace/Journal/data/ui_ja.lua') == 362)
+check('ui keys 368', count_keys('/workspace/Journal/data/ui_ja.lua') == 368)
+check('tracker opens journal list', type(logic.OpenPinInJournal) == 'function')
 check('prox range', logic.prox_range.radius == 30 and logic.prox_range.keep == 35)
 local worldmark = require('worldmark')
 check('arrow file map', worldmark.IconFile('available') == 'available.png' and worldmark.IconFile('missing') == nil)
