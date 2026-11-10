@@ -1118,7 +1118,11 @@ function M.Draw(controller, can_draw)
     end
 
     -- No saved height yet: fit the content for a few frames, then keep it.
-    if not size_placed and pin.height == nil and size_refit == 0 then
+    -- Once a height is saved, including one the player dragged, a change
+    -- in the pinned list must not fit the window again. Extra rows scroll.
+    if pin.height ~= nil then
+        size_refit = 0
+    elseif not size_placed and size_refit == 0 then
         size_refit = 3
     end
 

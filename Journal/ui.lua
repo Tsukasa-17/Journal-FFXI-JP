@@ -4966,10 +4966,12 @@ local draw_compass_window
 do
     local placed = false
     -- Resizing of the window. refit counts the frames in which the window
-    -- is asked to fit its content (a height of 0); after that its size
-    -- belongs to the player. clipped_signature remembers for which content
-    -- a refit was already asked because the content did not fit.
-    local refit, last_w, clipped_signature = 0, nil, nil
+    -- is asked to fit its content (a height of 0): the first time it is
+    -- opened, after a size reset, or when the text size changes. After
+    -- that the size belongs to the player. A nearby-quest update must not
+    -- start another fit, or the dragged size is replaced. Content that
+    -- does not fit scrolls.
+    local refit, last_w = 0, nil
     local compass_scale, last_scale = 1.0, nil
 
     -- A size in pixels, scaled with the text size of the Journal and with
@@ -5138,7 +5140,6 @@ do
             refit = 0
             last_w = nil
             last_scale = nil
-            clipped_signature = nil
 
             return
         end
@@ -5790,27 +5791,6 @@ do
                     ) then
 
                     controller.SetCompassSize(window_width, window_height)
-                end
-
-                -- New content that does not fit (an NPC was added): fit
-                -- again, once for each content.
-                local signature = state.status .. #npc_rows .. '/' .. #pin_rows
-
-                for _, row in ipairs(npc_rows) do
-                    signature = signature .. row.status .. #(row.quests or {})
-                end
-
-                for _, row in ipairs(pin_rows) do
-                    signature = signature .. row.status
-                end
-
-                if imgui.GetScrollMaxY
-                    and imgui.GetScrollMaxY() > 1
-                    and signature ~= clipped_signature then
-
-                    clipped_signature = signature
-                    refit = 3
-                    last_w = window_width
                 end
             end
 
