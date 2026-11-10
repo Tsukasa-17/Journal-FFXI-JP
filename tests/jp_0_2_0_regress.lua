@@ -263,6 +263,7 @@ check('tracker width stays scale', pin_src:find('window_width / WINDOW_WIDTH', 1
 check('tracker keeps dragged height', pin_src:find('if pin.height ~= nil then', 1, true) ~= nil)
 local ui_src = io.open('/workspace/Journal/ui.lua'):read('*a')
 check('compass content does not resize', ui_src:find('clipped_signature', 1, true) == nil and ui_src:find('GetScrollMaxY', 1, true) == nil)
+check('compass text does not resize', ui_src:find('last_scale', 1, true) == nil)
 local journal_src = io.open('/workspace/Journal/journal.lua'):read('*a')
 check('addon version 0.3.4', journal_src:find("addon.version = '0.3.4'", 1, true) ~= nil)
 check('addon author kxteel', journal_src:find("addon.author  = 'Kxteel'", 1, true) ~= nil)

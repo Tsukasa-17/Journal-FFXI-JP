@@ -4966,13 +4966,12 @@ local draw_compass_window
 do
     local placed = false
     -- Resizing of the window. refit counts the frames in which the window
-    -- is asked to fit its content (a height of 0): the first time it is
-    -- opened, after a size reset, or when the text size changes. After
-    -- that the size belongs to the player. A nearby-quest update must not
-    -- start another fit, or the dragged size is replaced. Content that
-    -- does not fit scrolls.
+    -- is asked to fit its content (a height of 0): only the first time it
+    -- is opened, or after a size reset, when nothing is saved yet. After
+    -- that the size belongs to the player. Nearby quests and the text
+    -- size must not start another fit. Content that does not fit scrolls.
     local refit, last_w = 0, nil
-    local compass_scale, last_scale = 1.0, nil
+    local compass_scale = 1.0
 
     -- A size in pixels, scaled with the text size of the Journal and with
     -- the text size of the compass.
@@ -5139,7 +5138,6 @@ do
             size_placed = false
             refit = 0
             last_w = nil
-            last_scale = nil
 
             return
         end
@@ -5150,15 +5148,6 @@ do
 
         compass_scale = controller.GetCompassTextScale
             and controller.GetCompassTextScale() or 1.0
-
-        -- A new text size: fit the window to the content again.
-        if last_scale == nil then
-            last_scale = compass_scale
-        elseif compass_scale ~= last_scale then
-            last_scale = compass_scale
-            refit = 3
-            last_w = nil
-        end
 
         local now = os.clock()
         local state = controller.GetCompassState(now)
@@ -5188,10 +5177,12 @@ do
 
         size_placed = true
 
+        -- Limits stay put when the compass text size changes, so a saved
+        -- window is not pushed in or out by the new text.
         if imgui.SetNextWindowSizeConstraints then
             imgui.SetNextWindowSizeConstraints(
-                { cscaled(190), cscaled(80) },
-                { cscaled(1000), cscaled(1000) }
+                { scaled(190), scaled(80) },
+                { scaled(1000), scaled(1000) }
             )
         end
 

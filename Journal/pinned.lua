@@ -1100,7 +1100,8 @@ function M.Draw(controller, can_draw)
 
     -- The settings stepper (and /journal pin size) changed the width.
     -- Apply that width once. A drag updates the same scale, so it does
-    -- not come back through here and fight the mouse.
+    -- not come back through here and fight the mouse. Text size and bold
+    -- are not part of this scale, so they leave the saved window alone.
     if applied_scale ~= nil
         and math.abs(layout.size_scale - applied_scale) > 0.001 then
 
