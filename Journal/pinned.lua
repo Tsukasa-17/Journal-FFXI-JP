@@ -29,6 +29,15 @@ local italic_tint = { 0.75, 0.84, 1.00, 1.00 }
 
 local restore_window = true
 
+-- Drag-resize, in the same way as the compass. The width is the tracker
+-- size (pin_scale). The height is remembered on its own. Text size is not
+-- part of either. size_refit is the few frames that fit the content before
+-- a height has been saved.
+local size_placed = false
+local size_refit = 0
+local applied_scale = nil
+local seen_w, seen_h = nil, nil
+
 local WINDOW_WIDTH = 420
 local TAB_NAME_LENGTH = 12
 local TEXT_SIZE = 16
@@ -290,6 +299,36 @@ function M.LayoutScale(pin)
         text_scale = text_scale,
         size_scale = size_scale,
     }
+end
+
+-- Height of the stacked list. A saved window height caps it so the list
+-- and the window do not each grow their own scrollbar. 0 means no cap.
+-- Sixteen pixels stay free at the corner for the resize grip.
+function M.StackLimit(stack_max, content_avail)
+    stack_max = tonumber(stack_max) or 0
+
+    if stack_max ~= stack_max or stack_max < 0 or stack_max == math.huge then
+        stack_max = 0
+    end
+
+    stack_max = math.floor(stack_max)
+    content_avail = tonumber(content_avail)
+
+    if content_avail == nil
+        or content_avail ~= content_avail
+        or content_avail == math.huge
+        or content_avail <= 0 then
+
+        return stack_max
+    end
+
+    content_avail = math.max(1, math.floor(content_avail) - 16)
+
+    if stack_max <= 0 or content_avail < stack_max then
+        return content_avail
+    end
+
+    return stack_max
 end
 
 ---------------------------------------------------------- flush right
@@ -733,8 +772,34 @@ end
 
 -- max_height 0 lets the tracker grow with every pin. Otherwise the items
 -- scroll with the mouse wheel once they are taller than max_height.
-local function draw_stacked(controller, pins, max_height)
+local function content_height()
+    if imgui.GetContentRegionAvail == nil then
+        return nil
+    end
+
+    local ok, first, second = pcall(imgui.GetContentRegionAvail)
+
+    if not ok then
+        return nil
+    end
+
+    if type(first) == 'number' and type(second) == 'number' then
+        return second
+    end
+
+    if type(first) == 'table' then
+        return tonumber(first.y or first[2])
+    end
+
+    return nil
+end
+
+local function draw_stacked(controller, pins, max_height, window_fixed)
     max_height = tonumber(max_height) or 0
+
+    if window_fixed then
+        max_height = M.StackLimit(max_height, content_height())
+    end
 
     if max_height <= 0 or imgui.BeginChild == nil then
         stack_height = nil
@@ -992,6 +1057,10 @@ function M.Draw(controller, can_draw)
     local pin = controller.GetPinState()
 
     if pin == nil or not pin.visible then
+        size_placed = false
+        size_refit = 0
+        seen_w, seen_h = nil, nil
+
         return
     end
 
@@ -1029,8 +1098,49 @@ function M.Draw(controller, can_draw)
 
     current_size = layout.font
 
-    -- Fixed width, height follows the content.
-    imgui.SetNextWindowSize({ layout.width, 0 })
+    -- The settings stepper (and /journal pin size) changed the width.
+    -- Apply that width once. A drag updates the same scale, so it does
+    -- not come back through here and fight the mouse. Text size and bold
+    -- are not part of this scale, so they leave the saved window alone.
+    if applied_scale ~= nil
+        and math.abs(layout.size_scale - applied_scale) > 0.001 then
+
+        size_placed = false
+        seen_w = nil
+        applied_scale = layout.size_scale
+
+        if pin.height ~= nil then
+            size_refit = 0
+        end
+    end
+
+    if applied_scale == nil then
+        applied_scale = layout.size_scale
+    end
+
+    -- No saved height yet: fit the content for a few frames, then keep it.
+    -- Once a height is saved, including one the player dragged, a change
+    -- in the pinned list must not fit the window again. Extra rows scroll.
+    if pin.height ~= nil then
+        size_refit = 0
+    elseif not size_placed and size_refit == 0 then
+        size_refit = 3
+    end
+
+    if size_refit > 0 then
+        imgui.SetNextWindowSize({ layout.width, 0 })
+    elseif not size_placed and pin.height ~= nil then
+        imgui.SetNextWindowSize({ layout.width, pin.height })
+    end
+
+    size_placed = true
+
+    if imgui.SetNextWindowSizeConstraints then
+        imgui.SetNextWindowSizeConstraints(
+            { WINDOW_WIDTH * 0.60, 80 },
+            { WINDOW_WIDTH * 2.00, 1200 }
+        )
+    end
 
     -- Opacity of the text and the background set in the settings. The
     -- background is transparent by default, and there is no border.
@@ -1049,16 +1159,25 @@ function M.Draw(controller, can_draw)
     )
     imgui.PushStyleColor(ImGuiCol_Border, { 0, 0, 0, 0 })
 
+    -- The corner grip stays invisible until the mouse is over it.
+    imgui.PushStyleColor(ImGuiCol_ResizeGrip, TRANSPARENT)
+    imgui.PushStyleColor(ImGuiCol_ResizeGripHovered, { 0.80, 0.84, 0.95, 0.55 })
+    imgui.PushStyleColor(ImGuiCol_ResizeGripActive, { 0.80, 0.84, 0.95, 0.85 })
+
     local open = { true }
+    local flags = ImGuiWindowFlags_NoTitleBar
+        + ImGuiWindowFlags_NoSavedSettings
+        + ImGuiWindowFlags_NoCollapse
+
+    -- While the window is still fitting its content it must not scroll.
+    if size_refit > 0 or pin.height == nil then
+        flags = flags + ImGuiWindowFlags_NoScrollbar
+    end
 
     if imgui.Begin(
         'Pinned Tracker###JournalPinned',
         open,
-        ImGuiWindowFlags_NoTitleBar
-            + ImGuiWindowFlags_NoSavedSettings
-            + ImGuiWindowFlags_NoScrollbar
-            + ImGuiWindowFlags_NoCollapse
-            + ImGuiWindowFlags_NoResize
+        flags
     ) then
         -- Everything in the window, headers and buttons included, is set
         -- in the text font at the scaled size. Without that font the
@@ -1089,7 +1208,7 @@ function M.Draw(controller, can_draw)
         elseif pin.mode == 'tabs' then
             draw_tabs(controller, pins, pin.active)
         else
-            draw_stacked(controller, pins, pin.stack_max)
+            draw_stacked(controller, pins, pin.stack_max, pin.height ~= nil)
         end
 
         apply_pending(controller, pins)
@@ -1103,10 +1222,44 @@ function M.Draw(controller, can_draw)
         if x ~= pin.x or y ~= pin.y then
             controller.SetPinGeometry(x, y)
         end
+
+        local window_width, window_height = imgui.GetWindowSize()
+
+        -- The fit of the first frames, then whatever the player drags.
+        -- Width is stored as the tracker size, so the settings stepper
+        -- shows the same value. Height is stored on its own. Text size
+        -- is never changed here.
+        if size_refit > 0 then
+            size_refit = size_refit - 1
+
+            if size_refit == 0 and controller.SetPinHeight then
+                controller.SetPinHeight(window_height)
+                seen_w, seen_h = window_width, window_height
+            end
+        elseif controller.SetPinScale and controller.SetPinHeight then
+            local width_changed = seen_w == nil
+                or math.abs(window_width - seen_w) > 2
+            local height_changed = seen_h == nil
+                or math.abs(window_height - seen_h) > 2
+
+            if width_changed or height_changed then
+                if width_changed then
+                    applied_scale = controller.SetPinScale(
+                        window_width / WINDOW_WIDTH
+                    )
+                end
+
+                if height_changed then
+                    controller.SetPinHeight(window_height)
+                end
+
+                seen_w, seen_h = window_width, window_height
+            end
+        end
     end
 
     imgui.End()
-    imgui.PopStyleColor(2)
+    imgui.PopStyleColor(5)
 
     if alpha_pushed then
         imgui.PopStyleVar(1)

@@ -1,4 +1,4 @@
-# Journal 0.3.4 by Kxteel [jpver 0.3.0 by Tsukasa]
+# Journal 0.3.4 by Kxteel [jpver 0.3.1 by Tsukasa]
 
 <img src="Journal/assets/journal_icon.png" alt="クエストブック" width="128">
 
@@ -90,6 +90,6 @@ Journalを閉じると、クエストブックの絵が出ます。クリック�
 
 ## ライセンス
 
-Journalの原著作権は Copyright (c) 2026 Kxteel です。元のMIT許諾は [Journal/LICENSE](Journal/LICENSE) に原文のままあります。日本語版の表示は [jpver 0.3.0 by Tsukasa] です。プログラムの版番号は 0.3.4 です。
+Journalの原著作権は Copyright (c) 2026 Kxteel です。元のMIT許諾は [Journal/LICENSE](Journal/LICENSE) に原文のままあります。日本語版の表示は [jpver 0.3.1 by Tsukasa] です。プログラムの版番号は 0.3.4 です。
 
 ソースをまとめた配布物は GPLv3 です。全文は [Journal/COPYING](Journal/COPYING) にあります。無保証で、条件に従えば見ること、変えること、再配布ができます。MIT、BSD、OFLの各通知は [Journal/THIRD_PARTY_NOTICES.md](Journal/THIRD_PARTY_NOTICES.md) と [Journal/licenses](Journal/licenses) に残しています。これらの通知は消さないでください。
