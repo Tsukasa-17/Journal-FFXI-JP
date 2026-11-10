@@ -4972,6 +4972,10 @@ do
     -- size must not start another fit. Content that does not fit scrolls.
     local refit, last_w = 0, nil
     local compass_scale = 1.0
+    local compass_bold = false
+    local compass_fake_bold = false
+    local compass_list_height = nil
+    local window_epoch = nil
 
     -- A size in pixels, scaled with the text size of the Journal and with
     -- the text size of the compass.
@@ -5006,10 +5010,22 @@ do
     -- A small, dim "x" at the right end of the row that was just drawn: an
     -- invisible button with two lines drawn over it, lighter when the mouse
     -- is on it. Returns true when it was pressed.
+    local function live_width(fallback)
+        if imgui.GetWindowWidth then
+            local ok, width = pcall(imgui.GetWindowWidth)
+
+            if ok and type(width) == 'number' and width > 1 then
+                return width
+            end
+        end
+
+        return fallback
+    end
+
     local function draw_cross(id, window_width)
         local cross = cscaled(14)
 
-        imgui.SameLine(window_width - cscaled(12) - cross)
+        imgui.SameLine(live_width(window_width) - cscaled(12) - cross)
 
         local pressed = imgui.InvisibleButton(id, { cross, cross })
 
@@ -5090,6 +5106,11 @@ do
 
             draw:AddText({ x + 1, y + 1 }, 0xCC000000, text)
             draw:AddText({ x, y }, imgui.GetColorU32(color), text)
+
+            -- No bold face: draw the same text one pixel to the right.
+            if compass_fake_bold then
+                draw:AddText({ x + 1, y }, imgui.GetColorU32(color), text)
+            end
         end)
 
         if not reserved then
@@ -5148,6 +5169,24 @@ do
 
         compass_scale = controller.GetCompassTextScale
             and controller.GetCompassTextScale() or 1.0
+        compass_bold = controller.GetCompassBold and controller.GetCompassBold() or false
+
+        local fonts = require('richtext').fonts or {}
+
+        compass_fake_bold = compass_bold and fonts.bold == nil
+
+        -- The size control changed the width. Apply the saved size once.
+        -- Text size, bold, and the list height do not come through here.
+        local epoch = controller.GetCompassWindowEpoch
+            and controller.GetCompassWindowEpoch() or 0
+
+        if window_epoch == nil then
+            window_epoch = epoch
+        elseif epoch ~= window_epoch then
+            window_epoch = epoch
+            size_placed = false
+            refit = 0
+        end
 
         local now = os.clock()
         local state = controller.GetCompassState(now)
@@ -5212,10 +5251,16 @@ do
             { 0.80, 0.84, 0.95, 0.85 }
         )
 
-        local font_pushed = journal_font ~= nil
+        local font_pushed = false
+        local face = journal_font
 
-        if font_pushed then
-            imgui.PushFont(journal_font, journal_font_size * compass_scale)
+        if compass_bold and fonts.bold ~= nil then
+            face = fonts.bold
+        end
+
+        if face ~= nil then
+            imgui.PushFont(face, journal_font_size * compass_scale)
+            font_pushed = true
         end
 
         -- No title bar and no close button: the window is moved by
@@ -5274,7 +5319,12 @@ do
                 if #npc_rows == 0 and #pin_rows == 0 then
                     richtext.draw_wrapped(
                         message,
-                        { color = colors.text_dim, size = step_font_size * compass_scale, shadow = true }
+                        {
+                            color = colors.text_dim,
+                            size = step_font_size * compass_scale,
+                            shadow = true,
+                            bold = compass_bold,
+                        }
                     )
                 end
             elseif message ~= nil then
@@ -5282,7 +5332,12 @@ do
 
                 richtext.draw_wrapped(
                     message,
-                    { color = colors.text_dim, size = step_font_size * compass_scale, shadow = true }
+                    {
+                        color = colors.text_dim,
+                        size = step_font_size * compass_scale,
+                        shadow = true,
+                        bold = compass_bold,
+                    }
                 )
             else
                 if state.npc ~= nil then
@@ -5384,6 +5439,35 @@ do
                         colors.text_dim,
                         tx('Map square') .. ' ' .. state.grid
                     )
+                end
+            end
+
+            -- The pinned NPCs and the nearby quests. A height limit scrolls
+            -- this list only. The arrow and the search stay put, and the
+            -- window itself keeps the size the player set.
+            local stack_limit = controller.GetCompassStackMax
+                and controller.GetCompassStackMax() or 0
+            local list_capped = false
+
+            if stack_limit > 0 and imgui.BeginChild ~= nil then
+                local child_h = math.min(
+                    compass_list_height or stack_limit,
+                    stack_limit
+                )
+
+                imgui.PushStyleColor(ImGuiCol_ChildBg, transparent)
+
+                local opened_child = imgui.BeginChild(
+                    '##CompassStack',
+                    { 0, math.max(1, child_h) },
+                    ImGuiChildFlags_None or false
+                )
+
+                if opened_child then
+                    list_capped = true
+                else
+                    imgui.EndChild()
+                    imgui.PopStyleColor()
                 end
             end
 
@@ -5497,7 +5581,7 @@ do
                     -- drawn over it, lighter when the mouse is on it.
                     local cross = cscaled(14)
 
-                    imgui.SameLine(window_width - cscaled(12) - cross)
+                    imgui.SameLine(live_width(window_width) - cscaled(12) - cross)
 
                     if imgui.InvisibleButton(
                         '##CompassNpcRemove' .. index,
@@ -5672,6 +5756,17 @@ do
                 controller.RemoveCompassNpc(remove_index)
             end
 
+            if list_capped then
+                local ok_y, content_y = pcall(imgui.GetCursorPosY)
+
+                if ok_y and tonumber(content_y) ~= nil then
+                    compass_list_height = math.ceil(content_y) + 2
+                end
+
+                imgui.EndChild()
+                imgui.PopStyleColor()
+            end
+
             -- The search box.
             if controller.SearchCompassNpcs
                 and controller.AddCompassNpc
@@ -5715,6 +5810,21 @@ do
                         imgui.GetColorU32(colors.text_dim),
                         tx('Search an NPC')
                     )
+
+                    if compass_fake_bold then
+                        imgui.GetWindowDrawList():AddText(
+                            {
+                                box_x + 9,
+                                box_y
+                                    + (
+                                        (box_bottom - box_y)
+                                        - imgui.GetTextLineHeight()
+                                    ) * 0.5,
+                            },
+                            imgui.GetColorU32(colors.text_dim),
+                            tx('Search an NPC')
+                        )
+                    end
                 end
 
                 if typed or search_text ~= search_buffer[1] then
@@ -6376,6 +6486,22 @@ local function draw_settings_window()
         if controller.GetCompassOpacity and controller.AdjustCompassOpacity then
             draw_settings_header(tx('Compass'))
 
+            if controller.GetCompassWindowScale
+                and controller.AdjustCompassWindowScale then
+
+                draw_settings_stepper(
+                    'compass_window_size',
+                    tx('Window size'),
+                    string.format('%.1fx', controller.GetCompassWindowScale()),
+                    function(direction)
+                        controller.AdjustCompassWindowScale(direction)
+                    end,
+                    function()
+                        controller.SetCompassWindowScale(1.0)
+                    end
+                )
+            end
+
             if controller.GetCompassTextScale then
                 draw_settings_stepper(
                     'compass_text_size',
@@ -6386,6 +6512,33 @@ local function draw_settings_window()
                     end,
                     function()
                         controller.SetCompassTextScale(1.0)
+                    end
+                )
+            end
+
+            if controller.GetCompassBold and controller.SetCompassBold then
+                draw_settings_checkbox(
+                    'compass_bold',
+                    tx('Bold text'),
+                    controller.GetCompassBold(),
+                    controller.SetCompassBold
+                )
+            end
+
+            if controller.GetCompassStackMax and controller.AdjustCompassStackMax then
+                local stack_max = controller.GetCompassStackMax()
+
+                draw_settings_stepper(
+                    'compass_stack_max',
+                    tx('Stacked height limit'),
+                    stack_max > 0
+                        and string.format('%dpx', stack_max)
+                        or tx('No limit'),
+                    function(direction)
+                        controller.AdjustCompassStackMax(direction)
+                    end,
+                    function()
+                        controller.SetCompassStackMax(0)
                     end
                 )
             end

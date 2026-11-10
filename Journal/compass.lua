@@ -63,6 +63,21 @@ local opacity = 1.0
 local TEXT_SCALE_MIN = 0.60
 local TEXT_SCALE_MAX = 1.60
 local text_scale = 1.0
+-- Width of the window as a multiple of WINDOW_BASE. The text size is not
+-- part of it. 1 keeps a window that has not been sized yet unchanged.
+local WINDOW_BASE = 260
+local WINDOW_SCALE_MIN = 0.60
+local WINDOW_SCALE_MAX = 1000 / WINDOW_BASE
+local WINDOW_SCALE_STEP = 0.10
+local window_scale = 1.0
+-- Bumped only when the player uses the size control, so a drag is not
+-- applied again on the next frame.
+local scale_epoch = 0
+local bold = false
+local STACK_MIN = 200
+local STACK_MAX = 960
+local STACK_STEP = 40
+local stack_max = 0
 local search_visible = true
 local state = { status = 'none' }
 local cache = { text = nil, styles = nil, name = nil, grid = nil }
@@ -1561,6 +1576,18 @@ function M.GetSize()
 end
 
 -- width and height nil put the window back to fitting its content.
+local function clamp_window_scale(value)
+    value = tonumber(value)
+
+    if value == nil or value ~= value or value == math.huge or value <= 0 then
+        return 1
+    end
+
+    value = math.max(WINDOW_SCALE_MIN, math.min(WINDOW_SCALE_MAX, value))
+
+    return math.floor(value * 100 + 0.5) / 100
+end
+
 function M.SetSize(width, height)
     if type(width) == 'number' and type(height) == 'number'
         and width >= 50 and height >= 30
@@ -1568,10 +1595,91 @@ function M.SetSize(width, height)
 
         window_w = width
         window_h = height
+        window_scale = clamp_window_scale(width / WINDOW_BASE)
     else
         window_w = nil
         window_h = nil
+        window_scale = 1
     end
+end
+
+function M.GetWindowScale()
+    return window_scale
+end
+
+function M.GetWindowScaleEpoch()
+    return scale_epoch
+end
+
+-- Sets the width from the size control and keeps the height. Does not
+-- change the text size. The epoch tells the window to apply this once.
+function M.SetWindowScale(value)
+    local scale = clamp_window_scale(value)
+    local width = math.floor(WINDOW_BASE * scale + 0.5)
+    local height = window_h or math.floor(WINDOW_BASE * 0.75 + 0.5)
+
+    if scale == window_scale and window_w == width and window_h == height then
+        return scale
+    end
+
+    window_scale = scale
+    window_w = width
+    window_h = height
+    scale_epoch = scale_epoch + 1
+
+    return scale
+end
+
+function M.AdjustWindowScale(direction)
+    return M.SetWindowScale(window_scale + (tonumber(direction) or 0) * WINDOW_SCALE_STEP)
+end
+
+function M.GetBold()
+    return bold
+end
+
+function M.SetBold(value)
+    bold = value == true
+
+    return bold
+end
+
+function M.ClampStackMax(value)
+    value = tonumber(value)
+
+    if value == nil or value ~= value or value == math.huge or value <= 0 then
+        return 0
+    end
+
+    value = math.floor(value + 0.5)
+
+    return math.max(STACK_MIN, math.min(STACK_MAX, value))
+end
+
+function M.GetStackMax()
+    return stack_max
+end
+
+function M.SetStackMax(value)
+    stack_max = M.ClampStackMax(value)
+
+    return stack_max
+end
+
+function M.AdjustStackMax(direction)
+    if (tonumber(direction) or 0) >= 0 then
+        if stack_max <= 0 then
+            return M.SetStackMax(STACK_MIN)
+        end
+
+        return M.SetStackMax(stack_max + STACK_STEP)
+    end
+
+    if stack_max <= STACK_MIN then
+        return M.SetStackMax(0)
+    end
+
+    return M.SetStackMax(stack_max - STACK_STEP)
 end
 
 local function clamp_opacity(value, default)
@@ -1650,6 +1758,10 @@ function M.Load(saved)
     window_h = nil
     opacity = 1.0
     text_scale = 1.0
+    window_scale = 1
+    scale_epoch = 0
+    bold = false
+    stack_max = 0
     search_visible = true
     cache.text = nil
     state = { status = 'none' }
@@ -1676,9 +1788,15 @@ function M.Load(saved)
     opacity = clamp_opacity(saved.opacity, 1.0)
     M.SetTextScale(saved.text_scale)
     search_visible = saved.search ~= false
+    bold = saved.bold == true
+    stack_max = M.ClampStackMax(saved.stack_max)
 
+    -- A saved size wins, so an older file keeps the window the player left.
+    -- The size control then shows that width. It does not resize on load.
     if type(saved.w) == 'number' and type(saved.h) == 'number' then
         M.SetSize(saved.w, saved.h)
+    else
+        window_scale = clamp_window_scale(saved.window_scale or 1)
     end
 
     if type(saved.npcs) == 'table' then
@@ -1718,6 +1836,9 @@ function M.Serialize()
     saved.h = window_h
     saved.opacity = opacity
     saved.text_scale = text_scale
+    saved.window_scale = window_scale
+    saved.bold = bold
+    saved.stack_max = stack_max
     saved.search = search_visible
 
     saved.npcs = new_table()

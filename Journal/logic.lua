@@ -5040,6 +5040,72 @@ do
         )
     end
 
+    function M.GetCompassWindowScale()
+        return M.compass.GetWindowScale()
+    end
+
+    function M.GetCompassWindowEpoch()
+        return M.compass.GetWindowScaleEpoch()
+    end
+
+    function M.SetCompassWindowScale(value)
+        local epoch = M.compass.GetWindowScaleEpoch()
+        local scale = M.compass.SetWindowScale(value)
+
+        if M.compass.GetWindowScaleEpoch() ~= epoch then
+            request_config_save()
+        end
+
+        return scale
+    end
+
+    function M.AdjustCompassWindowScale(direction)
+        return M.SetCompassWindowScale(
+            M.compass.GetWindowScale() + (tonumber(direction) or 0) * 0.10
+        )
+    end
+
+    function M.GetCompassBold()
+        return M.compass.GetBold()
+    end
+
+    function M.SetCompassBold(value)
+        local old = M.compass.GetBold()
+        local bold = M.compass.SetBold(value)
+
+        if bold ~= old then
+            request_config_save()
+        end
+
+        return bold
+    end
+
+    function M.GetCompassStackMax()
+        return M.compass.GetStackMax()
+    end
+
+    function M.SetCompassStackMax(value)
+        local old = M.compass.GetStackMax()
+        local height = M.compass.SetStackMax(value)
+
+        if height ~= old then
+            request_config_save()
+        end
+
+        return height
+    end
+
+    function M.AdjustCompassStackMax(direction)
+        local old = M.compass.GetStackMax()
+        local height = M.compass.AdjustStackMax(direction)
+
+        if height ~= old then
+            request_config_save()
+        end
+
+        return height
+    end
+
     function M.GetCompassSearchVisible()
         return M.compass.GetSearchVisible()
     end
