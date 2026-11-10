@@ -889,6 +889,7 @@ local function apply_config_part_two()
         clamp_opacity(config.pin_background, 0.0, BACKGROUND_MAX, 0.0)
     M.pin_bold = config.pin_bold == true
     M.pin_stack_max = M.ClampPinStackMax(config.pin_stack_max)
+    M.pin_height = M.ClampPinHeight(config.pin_height)
     language = 'ja'
     config.language = language -- Migrate only this preference; retain all other settings.
     require('font_choice').load(config.font_choice)
@@ -1081,6 +1082,7 @@ local function update_config_values()
     config.pin_layout_v2 = true
     config.pin_bold = M.pin_bold == true
     config.pin_stack_max = M.pin_stack_max or 0
+    config.pin_height = M.pin_height
     config.settings_width = M.settings_w
     config.settings_height = M.settings_h
     config.pin_show_next = pin_show_next
@@ -3514,6 +3516,7 @@ function M.GetPinState()
         text_scale = M.pin_text_scale or 1.0,
         bold = M.pin_bold == true,
         stack_max = M.pin_stack_max or 0,
+        height = M.pin_height,
         show_next = pin_show_next,
         opacity = pin_opacity,
         background = pin_background,
@@ -3575,6 +3578,34 @@ end
 -- direction is +1 (bigger) or -1 (smaller)
 function M.AdjustPinScale(direction)
     return M.SetPinScale(pin_scale + direction * PIN_SCALE_STEP)
+end
+
+-- Height of the tracker window in pixels. nil until the player has a
+-- saved height (the first fit, or a drag). Width stays pin_scale.
+-- 80 to 1200, the same range the corner will drag.
+function M.ClampPinHeight(value)
+    value = tonumber(value)
+
+    if value == nil or value ~= value or value == math.huge or value <= 0 then
+        return nil
+    end
+
+    return math.max(80, math.min(1200, math.floor(value + 0.5)))
+end
+
+function M.GetPinHeight()
+    return M.pin_height
+end
+
+function M.SetPinHeight(value)
+    local height = M.ClampPinHeight(value)
+
+    if height ~= M.pin_height then
+        M.pin_height = height
+        request_config_save()
+    end
+
+    return height
 end
 
 -- Tracker text size, 50% to 200%, separate from the Journal text size
