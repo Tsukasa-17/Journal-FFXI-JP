@@ -646,7 +646,14 @@ function M.draw_wrapped(text, opts)
 
         available = width
 
-        local usable = math.max(40, width - 6)
+        local reserve = tonumber(opts.reserve) or 0
+
+        if reserve < 0 then
+            reserve = 0
+        end
+
+        -- Room on the right (a close button) stays out of the wrapped lines.
+        local usable = math.max(40, width - 6 - reserve)
         local key = text .. '\0' .. math.floor(usable) .. '\0' .. size
             .. (bold_all and '\0b' or '')
 

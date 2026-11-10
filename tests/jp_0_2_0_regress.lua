@@ -264,6 +264,9 @@ check('tracker keeps dragged height', pin_src:find('if pin.height ~= nil then', 
 local ui_src = io.open('/workspace/Journal/ui.lua'):read('*a')
 check('compass content does not resize', ui_src:find('clipped_signature', 1, true) == nil and ui_src:find('GetScrollMaxY', 1, true) == nil)
 check('compass text does not resize', ui_src:find('last_scale', 1, true) == nil)
+check('compass wraps like tracker', ui_src:find('Compass lines wrap to the window', 1, true) ~= nil)
+local rich_src = io.open('/workspace/Journal/richtext.lua'):read('*a')
+check('wrap leaves room for close', rich_src:find('opts.reserve', 1, true) ~= nil)
 check('compass bold setting', ui_src:find("tx('Bold text')", 1, true) ~= nil)
 check('compass stack setting', ui_src:find("tx('Stacked height limit')", 1, true) ~= nil)
 local compass = logic.compass

@@ -5022,10 +5022,56 @@ do
         return fallback
     end
 
-    local function draw_cross(id, window_width)
-        local cross = cscaled(14)
+    local function cursor_pos()
+        if imgui.GetCursorPos == nil then
+            return nil, nil
+        end
 
-        imgui.SameLine(live_width(window_width) - cscaled(12) - cross)
+        local ok, first, second = pcall(imgui.GetCursorPos)
+
+        if not ok then
+            return nil, nil
+        end
+
+        if type(first) == 'number' then
+            return first, second
+        end
+
+        if type(first) == 'table' then
+            return tonumber(first.x or first[1]), tonumber(first.y or first[2])
+        end
+
+        return nil, nil
+    end
+
+    local function cursor_y()
+        if imgui.GetCursorPosY then
+            local ok, y = pcall(imgui.GetCursorPosY)
+
+            if ok and type(y) == 'number' then
+                return y
+            end
+        end
+
+        local _, y = cursor_pos()
+
+        return y
+    end
+
+    -- top_y pins the button to the first line of a wrapped name.
+    local function draw_cross(id, window_width, top_y)
+        local cross = cscaled(14)
+        local after_x, after_y = nil, nil
+
+        if top_y ~= nil then
+            after_x, after_y = cursor_pos()
+            imgui.SetCursorPos({
+                math.max(0, live_width(window_width) - cscaled(12) - cross),
+                top_y,
+            })
+        else
+            imgui.SameLine(live_width(window_width) - cscaled(12) - cross)
+        end
 
         local pressed = imgui.InvisibleButton(id, { cross, cross })
 
@@ -5056,6 +5102,10 @@ do
 
         if imgui.IsItemHovered() and imgui.SetTooltip then
             imgui.SetTooltip(tx('Remove'))
+        end
+
+        if top_y ~= nil and after_x ~= nil and after_y ~= nil then
+            imgui.SetCursorPos({ after_x, after_y })
         end
 
         return pressed
@@ -5091,33 +5141,65 @@ do
         return nil, nil
     end
 
-    -- A line of text with a soft black shadow, as in the Tracker: the
-    -- line is reserved with invisible text and drawn twice.
-    local function shadow_text(color, text)
-        imgui.PushStyleColor(ImGuiCol_Text, transparent)
+    -- Compass lines wrap to the window, the same way the tracker does.
+    -- reserve keeps a close button clear of the text. The window size
+    -- is not changed here.
+    local function shadow_text(color, text, reserve)
+        richtext.draw_wrapped(tostring(text or ''), {
+            color = color,
+            size = journal_font_size * compass_scale,
+            shadow = true,
+            bold = compass_bold,
+            reserve = reserve,
+        })
+    end
 
-        local reserved = pcall(imgui.Text, text)
+    local function mark_block()
+        local x, y = 0, 0
+        local ok, first, second = pcall(imgui.GetCursorScreenPos)
 
-        imgui.PopStyleColor()
-
-        local drawn = reserved and pcall(function()
-            local draw = imgui.GetWindowDrawList()
-            local x, y = imgui.GetItemRectMin()
-
-            draw:AddText({ x + 1, y + 1 }, 0xCC000000, text)
-            draw:AddText({ x, y }, imgui.GetColorU32(color), text)
-
-            -- No bold face: draw the same text one pixel to the right.
-            if compass_fake_bold then
-                draw:AddText({ x + 1, y }, imgui.GetColorU32(color), text)
-            end
-        end)
-
-        if not reserved then
-            imgui.TextColored(color, text)
-        elseif not drawn then
-            imgui.TextColored(color, text)
+        if ok and type(first) == 'number' then
+            x, y = first, second or 0
+        elseif ok and type(first) == 'table' then
+            x = tonumber(first.x or first[1]) or 0
+            y = tonumber(first.y or first[2]) or 0
         end
+
+        local width = 0
+        local ok_w, region = pcall(imgui.GetContentRegionAvail)
+
+        if ok_w and type(region) == 'number' then
+            width = region
+        end
+
+        return { x = x, y = y, w = width }
+    end
+
+    local function block_hovered(mark)
+        local y2 = mark.y
+        local ok, first, second = pcall(imgui.GetCursorScreenPos)
+
+        if ok and type(first) == 'number' then
+            y2 = second or mark.y
+        elseif ok and type(first) == 'table' then
+            y2 = tonumber(first.y or first[2]) or mark.y
+        end
+
+        local mx, my = nil, nil
+        local ok_m, px, py = pcall(imgui.GetMousePos)
+
+        if ok_m and type(px) == 'number' then
+            mx, my = px, py
+        elseif ok_m and type(px) == 'table' then
+            mx = tonumber(px.x or px[1])
+            my = tonumber(px.y or px[2])
+        end
+
+        local hovered = mx ~= nil and my ~= nil
+            and mx >= mark.x and mx <= mark.x + math.max(1, mark.w)
+            and my >= mark.y and my < y2
+
+        return hovered, mark.x, mark.y, mark.x + math.max(1, mark.w), y2
     end
 
     local function compass_text(state)
@@ -5300,13 +5382,13 @@ do
                 and controller.GetCompassPinRows(now) or {}
 
             if state.target ~= nil then
-                shadow_text(
-                    colors.text,
-                    fit_text(state.target.name, available - cscaled(24))
-                )
+                local top_y = cursor_y()
+                local cross = cscaled(14)
+
+                shadow_text(colors.text, state.target.name, cross + cscaled(16))
 
                 -- The "x" stops pointing the compass at it.
-                if draw_cross('##CompassTargetRemove', window_width)
+                if draw_cross('##CompassTargetRemove', window_width, top_y)
                     and controller.RemoveCompassTarget then
 
                     controller.RemoveCompassTarget()
@@ -5341,14 +5423,22 @@ do
                 )
             else
                 if state.npc ~= nil then
-                    shadow_text(
-                        richtext.COLORS.npc,
-                        fit_text(state.npc, available)
-                    )
+                    shadow_text(richtext.COLORS.npc, state.npc)
                 end
 
                 -- The arrow area, only when the compass gives an angle.
-                local area = state.angle ~= nil and cscaled(86) or 0
+                -- A narrow window shrinks the arrow so it stays on screen.
+                local area = 0
+
+                if state.angle ~= nil then
+                    area = cscaled(86)
+
+                    local ok_w, region = pcall(imgui.GetContentRegionAvail)
+
+                    if ok_w and type(region) == 'number' and region > 8 and area > region then
+                        area = region
+                    end
+                end
                 local start_x, start_y = imgui.GetCursorScreenPos()
                 local center_x = x + window_width * 0.5
                 local center_y = start_y + area * 0.5
@@ -5415,19 +5505,13 @@ do
 
                     shadow_text(colors.text_dim, tx('In another zone:'))
 
-                    shadow_text(
-                        colors.text,
-                        fit_text(table.concat(zone_names, ', '), available)
-                    )
+                    shadow_text(colors.text, table.concat(zone_names, ', '))
 
                     -- The next zone on foot (data/zone_links.lua).
                     if state.next_zone ~= nil then
                         shadow_text(
                             colors.text_dim,
-                            fit_text(
-                                tx('Next:') .. ' ' .. zone_label(state.next_zone),
-                                available
-                            )
+                            tx('Next:') .. ' ' .. zone_label(state.next_zone)
                         )
                     end
                 else
@@ -5481,12 +5565,12 @@ do
                 end
 
                 for index, row in ipairs(pin_rows) do
-                    shadow_text(
-                        richtext.COLORS.npc,
-                        fit_text(row.npc, available - cscaled(24))
-                    )
+                    local top_y = cursor_y()
+                    local cross = cscaled(14)
 
-                    if draw_cross('##CompassPinRemove' .. index, window_width) then
+                    shadow_text(richtext.COLORS.npc, row.npc, cross + cscaled(16))
+
+                    if draw_cross('##CompassPinRemove' .. index, window_width, top_y) then
                         hide_key = row.key
                     end
 
@@ -5529,14 +5613,14 @@ do
                         color = colors.text_dim
                     end
 
-                    shadow_text(color, fit_text(line, available))
+                    shadow_text(color, line)
 
                     if row_message then
-                        shadow_text(row_color, fit_text(row_message, available))
+                        shadow_text(row_color, row_message)
                     end
 
                     -- Which quest or mission it is for.
-                    shadow_text(colors.text_dim, fit_text(row.title, available))
+                    shadow_text(colors.text_dim, row.title)
                 end
             end
 
@@ -5572,53 +5656,17 @@ do
                 for _, index in ipairs(order) do
                     local row = npc_rows[index]
 
-                    shadow_text(
-                        richtext.COLORS.npc,
-                        fit_text(i18n.step(row.name, row.id), available - cscaled(24))
-                    )
-
-                    -- A small, dim "x": an invisible button with two lines
-                    -- drawn over it, lighter when the mouse is on it.
+                    local top_y = cursor_y()
                     local cross = cscaled(14)
 
-                    imgui.SameLine(live_width(window_width) - cscaled(12) - cross)
+                    shadow_text(
+                        richtext.COLORS.npc,
+                        i18n.step(row.name, row.id),
+                        cross + cscaled(16)
+                    )
 
-                    if imgui.InvisibleButton(
-                        '##CompassNpcRemove' .. index,
-                        { cross, cross }
-                    ) then
+                    if draw_cross('##CompassNpcRemove' .. index, window_width, top_y) then
                         remove_index = index
-                    end
-
-                    do
-                        local min_x, min_y = imgui.GetItemRectMin()
-                        local max_x, max_y = imgui.GetItemRectMax()
-                        local cx = (min_x + max_x) * 0.5
-                        local cy = (min_y + max_y) * 0.5
-                        local arm = cross * 0.22
-                        local color = imgui.GetColorU32(
-                            imgui.IsItemHovered()
-                                and colors.cross_hover
-                                or colors.cross
-                        )
-                        local list = imgui.GetWindowDrawList()
-
-                        list:AddLine(
-                            { cx - arm, cy - arm },
-                            { cx + arm, cy + arm },
-                            color,
-                            1.2
-                        )
-                        list:AddLine(
-                            { cx - arm, cy + arm },
-                            { cx + arm, cy - arm },
-                            color,
-                            1.2
-                        )
-                    end
-
-                    if imgui.IsItemHovered() and imgui.SetTooltip then
-                        imgui.SetTooltip(tx('Remove'))
                     end
 
                     -- The quests of an NPC added by the proximity alert: a
@@ -5664,25 +5712,26 @@ do
                             end
                         end
 
+                        local mark = mark_block()
+
                         shadow_text(
                             quest.active and { 0.55, 0.95, 0.55, 1.00 } or colors.text,
-                            fit_text(i18n.step(quest.name, {
+                            i18n.step(quest.name, {
                                 kind = 'quest',
                                 id = quest.id,
-                            }), available)
+                            })
                         )
 
-                        -- A shaded box and a line under the text, brighter
+                        local over, min_x, min_y, max_x, max_y = block_hovered(mark)
+
+                        -- A shaded box under the wrapped name, brighter
                         -- with the mouse over it, so it looks clickable.
                         pcall(function()
-                            local min_x, min_y = imgui.GetItemRectMin()
-                            local max_x, max_y = imgui.GetItemRectMax()
-                            local over = imgui.IsItemHovered()
                             local list = imgui.GetWindowDrawList()
 
                             list:AddRectFilled(
                                 { min_x - 3, min_y },
-                                { max_x + 3, max_y + 1 },
+                                { max_x + 3, max_y },
                                 imgui.GetColorU32(quest.active and {
                                     0.35, 0.85, 0.40, over and 0.38 or 0.18,
                                 } or {
@@ -5691,8 +5740,8 @@ do
                                 3
                             )
                             list:AddLine(
-                                { min_x - 3, max_y + 1 },
-                                { max_x + 3, max_y + 1 },
+                                { min_x - 3, max_y },
+                                { max_x + 3, max_y },
                                 imgui.GetColorU32(quest.active and {
                                     0.55, 0.95, 0.55, over and 1.00 or 0.60,
                                 } or {
@@ -5702,12 +5751,13 @@ do
                             )
                         end)
 
-                        if imgui.IsItemHovered() then
+                        if over then
                             if imgui.SetTooltip then
                                 imgui.SetTooltip(tx('Opens the quest'))
                             end
 
-                            if imgui.IsItemClicked()
+                            if imgui.IsMouseClicked
+                                and imgui.IsMouseClicked(0)
                                 and controller.OpenQuestFromCompass then
 
                                 controller.OpenQuestSheet(quest.id)
@@ -5744,7 +5794,7 @@ do
                         color = colors.text_dim
                     end
 
-                    shadow_text(color, fit_text(line, available))
+                    shadow_text(color, line)
 
                     if row_message then
                         shadow_text(row_color, row_message)
@@ -5777,7 +5827,15 @@ do
                 ) then
 
                 imgui.Separator()
-                imgui.PushItemWidth(available)
+
+                local search_w = available
+                local ok_w, region = pcall(imgui.GetContentRegionAvail)
+
+                if ok_w and type(region) == 'number' and region > 8 then
+                    search_w = region
+                end
+
+                imgui.PushItemWidth(search_w)
 
                 local typed = imgui.InputText(
                     '##CompassSearch',
@@ -5833,12 +5891,16 @@ do
                 end
 
                 for index, item in ipairs(search_results) do
-                    if imgui.Selectable(
-                        fit_text(
-                            item.name .. ' - ' .. zone_label(item.zone),
-                            available
-                        ) .. '##CompassResult' .. index
-                    ) then
+                    local mark = mark_block()
+
+                    shadow_text(
+                        colors.text,
+                        item.name .. ' - ' .. zone_label(item.zone)
+                    )
+
+                    local hovered = block_hovered(mark)
+
+                    if hovered and imgui.IsMouseClicked and imgui.IsMouseClicked(0) then
                         local added, problem =
                             controller.AddCompassNpc(item.name, item.zone)
 
