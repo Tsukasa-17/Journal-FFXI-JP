@@ -566,6 +566,21 @@ local function marked(text, have)
     end)
 end
 check('ja count is not one of five', marked('Honey5個を用意。', { Honey = 1 }):find('(1/5)', 1, true) ~= nil)
+local ja_styles = require('style_ja').extend({ { index = {}, kind = 'item' } }, 'ja')
+local function marked_ja(text, have)
+    return rich.annotate(text, ja_styles, function(name, quantity)
+        local owned = have[name] or 0
+        if owned >= quantity then
+            return 'ok', owned
+        end
+        return 'partial', owned
+    end)
+end
+check('jp flint name parses four', marked_ja('Aquillinaに火打石4個を渡して100ギル。', { ['火打石'] = 4 }):find('VV', 1, true) ~= nil)
+check('jp flint short is not enough', marked_ja('火打石4個を用意。', { ['火打石'] = 1 }):find('(1/4)', 1, true) ~= nil)
+check('jp flint none stays unmarked', marked_ja('火打石4個を用意。', { ['火打石'] = 0 }) == '火打石4個を用意。')
+check('flash step uses flint', words['Obtain Flint Stone x4. It drops from worm type enemies such as Tunnel Worm, Carrion Worm and Stone Eater, and can also be found at the Auction House (Materials, Goldsmithing).']:find('火打石4個', 1, true) ~= nil)
+check('shady step uses zinc', words['Obtain Zinc Ore x4. It can be bought from Teerth in Bastok Markets for 200 gil, from Celestina in Mhaura for 200 gil, or at the Auction House, or you can mine it from a Mineral Vein.']:find('亜鉛鉱4個', 1, true) ~= nil)
 check('ja count check when enough', marked('Honey5個を用意。', { Honey = 5 }):find('VV', 1, true) ~= nil)
 check('ja trade is not a reward skip', marked('RaimbroyにHoney5個を渡し400ギルを受け取る。', { Honey = 5 }):find('VV', 1, true) ~= nil)
 check('reward receive stays unmarked', marked('receive the Mythril Sword.', { ['Mythril Sword'] = 1 }) == 'receive the Mythril Sword.')
