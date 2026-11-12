@@ -1,5 +1,5 @@
 {
-  "Journal/CHANGES_JP.md": "e3d0e66a2c3409628a5455c7f45fba5551bcba59279be6288b295f019e7796c3",
+  "Journal/CHANGES_JP.md": "710f71efc73f615b11aa3372f5ece2f3b50747f73ba5d8269866a6d6b2faa4f8",
   "Journal/COPYING": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
   "Journal/LICENSE": "4bc852f934fe7f28858842b778d9153edb8b83fdb6e5e50c2af86742d7f3cb3c",
   "Journal/LICENSE_SCOPE.md": "56ad0b4dda26607a6ae1fe9746f0d08bf6902d1d403b4e484492417099d74078",
@@ -124,8 +124,8 @@
   "Journal/sound_gain.lua": "30b06613257bbdc71a4d1c83e67cb5b22293f134814438b88a5f6b6dec28d854",
   "Journal/style_ja.lua": "0522b0e17d5bca38ce9a9d28334134a0352abbbf3c289ac06e6a6abd813bea6e",
   "Journal/tracker.lua": "3ecdbcf000b2ea4354026d5afc2bb96287c8cc3872c89bfd0620f9ea27ae836b",
-  "Journal/ui.lua": "f4bea2554ba4f282f293716dcd11f7c5a9f6d23e9ee228bdd335e5800a635054",
-  "Journal/window_fit.lua": "4c879e783287e945b81f33eda58010da075a82bcbba8913bfb89aaf5159e4fc6",
+  "Journal/ui.lua": "851089e7c8e6790b4b3917b9fdfa02b91cd4efa0dfbd3587ec241479f20c01f7",
+  "Journal/window_fit.lua": "9dc1c4784cabb746c19b3699222eb51a1e8ae29f5aca6e40a279eea39bb7e228",
   "Journal/worldmark.lua": "77dbc53d79d7c993205b55fe4f73ebbf3623c082ddf408cb5fbfe9e56943cf9d",
   "Journal/zone_aliases.lua": "ca1ca8efcc99b5f10da8e65bc9eb466e41d24b59c00016cda38833f17dd64d51",
   "Journal/zonematch.lua": "b4de3673702f154a106ca0204eeb69a3a1e072be720876594c9f0325bce88d68",

@@ -282,6 +282,26 @@ function M.journal_panes(content_width, ratio)
     return clamp_journal_panes(content_width, desired)
 end
 
+-- While the divider is dragged, the book stays at the position it had when
+-- the drag started. Idle calls return the current position and do not lock.
+function M.split_drag_lock(active, anchor_x, anchor_y, current_x, current_y)
+    current_x = finite_number(current_x)
+    current_y = finite_number(current_y)
+
+    if active ~= true then
+        return false, current_x, current_y
+    end
+
+    anchor_x = finite_number(anchor_x)
+    anchor_y = finite_number(anchor_y)
+
+    if anchor_x == nil or anchor_y == nil then
+        return false, current_x, current_y
+    end
+
+    return true, anchor_x, anchor_y
+end
+
 -- Fraction that journal_panes will turn back into this details width,
 -- after the same clamp. Nil when the width is not usable.
 function M.journal_ratio_for_details(content_width, details)
