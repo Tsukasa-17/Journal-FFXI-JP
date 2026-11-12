@@ -397,4 +397,47 @@ function M.draw_arrow(draw, cx, cy, size, angle, color)
     draw:AddTriangleFilled(tip, notch, right, color)
 end
 
+-- A sticky note (post-it): a square with the bottom right corner folded and
+-- two lines of "text". Colors are already converted (GetColorU32).
+function M.draw_postit(draw, x, y, size, paper, flap, ink)
+    if draw == nil then
+        return
+    end
+
+    local cut = size * 0.72
+
+    -- The paper: a square without the bottom right corner.
+    draw:AddRectFilled({ x, y }, { x + size, y + cut }, paper)
+    draw:AddRectFilled({ x, y + cut }, { x + cut, y + size }, paper)
+    draw:AddTriangleFilled(
+        { x + cut, y + cut },
+        { x + size, y + cut },
+        { x + cut, y + size },
+        paper
+    )
+
+    -- The folded corner.
+    draw:AddTriangleFilled(
+        { x + cut, y + cut },
+        { x + size, y + cut },
+        { x + cut, y + size },
+        flap
+    )
+
+    -- Two lines of text.
+    draw:AddLine(
+        { x + size * 0.18, y + size * 0.28 },
+        { x + size * 0.82, y + size * 0.28 },
+        ink,
+        1.5
+    )
+
+    draw:AddLine(
+        { x + size * 0.18, y + size * 0.5 },
+        { x + size * 0.62, y + size * 0.5 },
+        ink,
+        1.5
+    )
+end
+
 return M

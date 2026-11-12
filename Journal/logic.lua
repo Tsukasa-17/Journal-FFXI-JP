@@ -9,6 +9,7 @@ local i18n = require('i18n')
 -- It is a field of M and not a local variable: this file has no room left
 -- for more locals.
 M.personal = (require('personal'))
+M.notes = (require('notes'))
 
 -- The compass: an arrow to the NPC of the current step (compass.lua). A
 -- field of M for the same reason.
@@ -429,7 +430,7 @@ local OPACITY_STEP = 0.05
 local BACKGROUND_MAX = 0.80
 local journal_opacity = 1.0
 
--- Size of the text of the Journal and of its windows (0.8 to 1.4). The sizes
+-- Size of the text of the Journal and of its windows (0.5 to 1.4). The sizes
 -- of the buttons and the bars follow it.
 local TEXT_SCALE_MIN = 0.50
 local TEXT_SCALE_MAX = 1.40
@@ -900,6 +901,59 @@ local function apply_config_part_two()
     M.personal.Load(config.notes, config.favorites, config.favorite_filters)
     M.compass.Load(config.compass)
 
+    -- Size of the Settings window, kept between sessions.
+    local saved_win = config.settings_win
+
+    if type(saved_win) == 'table'
+        and tonumber(saved_win.w) ~= nil
+        and tonumber(saved_win.h) ~= nil then
+
+        M.settings_win = {
+            w = math.max(300, math.min(2400, tonumber(saved_win.w))),
+            h = math.max(200, math.min(2400, tonumber(saved_win.h))),
+        }
+    else
+        M.settings_win = nil
+    end
+
+    -- Size of the Fame window, kept between sessions.
+    local saved_fame_win = config.fame_win
+
+    if type(saved_fame_win) == 'table'
+        and tonumber(saved_fame_win.w) ~= nil
+        and tonumber(saved_fame_win.h) ~= nil then
+
+        M.fame_win = {
+            w = math.max(300, math.min(2400, tonumber(saved_fame_win.w))),
+            h = math.max(200, math.min(2400, tonumber(saved_fame_win.h))),
+        }
+    else
+        M.fame_win = nil
+    end
+
+    -- Fame levels read from the Fame Checker NPCs.
+    local saved_fame = config.fame_levels
+
+    M.fame_levels = {}
+
+    if type(saved_fame) == 'table' then
+        for _, area in ipairs(require('fame').AREAS) do
+            local key = area.key
+            local entry = saved_fame[key]
+
+            if type(entry) == 'table'
+                and tonumber(entry.level) ~= nil
+                and tonumber(entry.level) >= 1
+                and tonumber(entry.level) <= 9 then
+
+                M.fame_levels[key] = {
+                    level = math.floor(tonumber(entry.level)),
+                    time = tonumber(entry.time) or 0,
+                }
+            end
+        end
+    end
+
     -- Pins made before the checklist existed: the steps before the current
     -- one count as done.
     for _, entry in ipairs(pins) do
@@ -1113,6 +1167,9 @@ local function update_config_values()
     config.notes, config.favorites, config.favorite_filters =
         M.personal.Serialize()
     config.compass = M.compass.Serialize()
+    config.settings_win = M.settings_win
+    config.fame_win = M.fame_win
+    config.fame_levels = M.fame_levels
 
     -- The Mission Log and the Quest Log were removed in 0.1.13. Their
     -- old settings are dropped from the saved file.
@@ -1521,6 +1578,8 @@ local function build_quest_link_index()
                     category_index = category_index,
                     prereq = quest.prereq,
                     npc = quest.npc,
+                    area = quest.area,
+                    fame_area = quest.fame_area,
                     req = quest.req,
                     tracker_area = quest.tracker_area,
                     tracker_id = quest.tracker_id,
@@ -3710,6 +3769,7 @@ function M.SetFontChoice(code)
     if require('font_choice').set(code) then request_config_save() end
 end
 
+-- Size of the text of the Journal (0.5 to 1.4, 1.0 is the normal size).
 function M.GetTextScale()
     return journal_text_scale
 end
@@ -3830,6 +3890,112 @@ end
 
 function M.ToggleSettings()
     settings_open = not settings_open
+end
+
+-- Fame of the nations, read when the player talks to a Fame Checker (see
+-- fame.lua): { sandoria = { level, time }, bastok = ..., windurst = ..., jeuno,
+-- norg, selbina_rabao }.
+function M.GetFameLevels()
+    return M.fame_levels or {}
+end
+
+function M.GetFameOpen()
+    return M.fame_open == true
+end
+
+function M.SetFameOpen(value)
+    M.fame_open = value == true
+end
+
+function M.ToggleFame()
+    M.fame_open = not M.fame_open
+end
+
+-- Size of the Fame window: nil, nil until the player resizes it.
+function M.GetFameSize()
+    if M.fame_win then
+        return M.fame_win.w, M.fame_win.h
+    end
+
+    return nil, nil
+end
+
+function M.SetFameSize(width, height)
+    width = tonumber(width)
+    height = tonumber(height)
+
+    if width == nil or height == nil then
+        return
+    end
+
+    width = math.max(300, math.min(2400, math.floor(width + 0.5)))
+    height = math.max(200, math.min(2400, math.floor(height + 0.5)))
+
+    local old = M.fame_win
+
+    if old == nil or old.w ~= width or old.h ~= height then
+        M.fame_win = { w = width, h = height }
+        request_config_save()
+    end
+end
+
+-- true when the NPC is one of the Fame Checkers (they have their own icon).
+function M.IsFameChecker(name)
+    local ok, result = pcall(function()
+        return require('fame').IsChecker(name)
+    end)
+
+    return ok and result == true
+end
+
+function M.GetFameAreas()
+    return require('fame').AREAS
+end
+
+function M.SetFameLevel(area, level, stamp)
+    level = tonumber(level)
+
+    if level == nil or level < 1 or level > 9 then
+        return
+    end
+
+    M.fame_levels = M.fame_levels or {}
+
+    local old = M.fame_levels[area]
+
+    M.fame_levels[area] = { level = math.floor(level), time = stamp or 0 }
+
+    if old == nil or old.level ~= math.floor(level) then
+        request_config_save()
+    end
+end
+
+-- Size of the Settings window: nil, nil until the player resizes it.
+function M.GetSettingsSize()
+    if M.settings_win then
+        return M.settings_win.w, M.settings_win.h
+    end
+
+    return nil, nil
+end
+
+function M.SetSettingsSize(width, height)
+    width = tonumber(width)
+    height = tonumber(height)
+
+    if width == nil or height == nil then
+        return
+    end
+
+    width = math.max(300, math.min(2400, math.floor(width + 0.5)))
+    height = math.max(200, math.min(2400, math.floor(height + 0.5)))
+
+    local old = M.settings_win
+
+    if old == nil or old.w ~= width or old.h ~= height then
+        M.settings_win = { w = width, h = height }
+        request_config_save()
+    end
 end
 
 -- Moves the Journal and the Tracker back to a place on the screen, for when
@@ -5450,6 +5616,14 @@ do
                     or 'not_started'
 
                 if status ~= 'completed' and status ~= 'hidden' then
+                    -- The rank of the character (only the one of its own
+                    -- nation is known) is below the rank the mission needs.
+                    if status == 'not_started'
+                        and require('rank').IsBelow(area, mission.rank) then
+
+                        locked[mission.id] = true
+                    end
+
                     if not open then
                         open = true
                     elseif status == 'not_started' then
@@ -5462,6 +5636,114 @@ do
         return locked[tonumber(id)] == true
     end
 
+    -- The NPCs that give the missions of a nation (the Gate Guards). They
+    -- go to the automatic compass when the player is close, and carry the
+    -- icon of the mission available or not available.
+    M.mission_givers = {
+        areas = {
+            windurst = {
+                'Mokyokyo', 'Janshura-Rashura', 'Rakoh Buuma', 'Zokima-Rokima',
+            },
+            bastok = {
+                'Argus', 'Cleades', 'Malduc', 'Rashid',
+            },
+            sandoria = {
+                'Ambrotien', 'Endracion', 'Grilau',
+            },
+        },
+        by_name = nil,
+        cache = nil,
+        cache_time = nil,
+    }
+
+    -- The area of the missions an NPC gives, or nil.
+    function M.GetMissionGiverArea(name)
+        local givers = M.mission_givers
+
+        if givers.by_name == nil then
+            givers.by_name = {}
+
+            for area, names in pairs(givers.areas) do
+                for _, npc in ipairs(names) do
+                    givers.by_name[zonematch.normalize(npc)] = area
+                end
+            end
+        end
+
+        if type(name) ~= 'string' then
+            return nil
+        end
+
+        return givers.by_name[zonematch.normalize(name)]
+    end
+
+    -- The icon of a mission in progress: 'mission_progress', or
+    -- 'mission_available' when the file mission_progress.png is not there.
+    function M.MissionProgressKind()
+        local ok, icon = pcall(M.worldmark.GetIcon, 'mission_progress')
+
+        return (ok and icon ~= nil) and 'mission_progress'
+            or 'mission_available'
+    end
+
+    -- 'mission_available' when the NPC has a mission to give,
+    -- 'mission_progress' when the mission is in progress,
+    -- 'mission_locked' when there is none that can be
+    -- taken now (the rank is too low, or all are completed); nil when the
+    -- NPC does not give missions.
+    function M.GetMissionGiverIcon(name)
+        local area = M.GetMissionGiverArea(name)
+
+        if area == nil then
+            return nil
+        end
+
+        -- Looked at once per second at most (it is asked every frame).
+        local givers = M.mission_givers
+        local now = os.clock()
+
+        if givers.cache == nil or now - (givers.cache_time or -10) > 1 then
+            givers.cache = {}
+            givers.cache_time = now
+        end
+
+        if givers.cache[area] ~= nil then
+            return givers.cache[area]
+        end
+
+        local result = 'mission_locked'
+
+        for _, mission in ipairs(tracker.GetMissionArea(area) or {}) do
+            local status = tracker.GetMissionStatus(area, mission.id)
+                or mission_status_cache[
+                    get_status_cache_key(area, mission.id)
+                ]
+                or 'not_started'
+
+            if status ~= 'completed' and status ~= 'hidden' then
+                if status == 'not_started'
+                    and M.IsMissionLocked(area, mission.id) then
+
+                    result = 'mission_locked'
+                elseif status == 'active' then
+                    result = M.MissionProgressKind()
+                else
+                    result = 'mission_available'
+                end
+
+                break
+            end
+        end
+
+        givers.cache[area] = result
+
+        return result
+    end
+
+    -- The icon of a mission pinned in the Tracker (the pin has no area, so
+    -- the mission is looked for by id and name): 'mission_completed',
+    -- 'mission_progress', 'mission_locked' or 'mission_available'; nil when
+    -- it is not found or the game cannot track it.
     function M.GetMissionIconKind(id, name)
         for _, area in ipairs(tracker.GetMissionAreas()) do
             for _, mission in ipairs(tracker.GetMissionArea(area) or {}) do
@@ -5484,7 +5766,9 @@ do
                         and M.IsMissionLocked(area, mission.id) then
 
                         return 'mission_locked'
-                    elseif status == 'active' or status == 'not_started' then
+                    elseif status == 'active' then
+                        return M.MissionProgressKind()
+                    elseif status == 'not_started' then
                         return 'mission_available'
                     end
 
@@ -5685,10 +5969,44 @@ do
     --                           req or in the first step) that the main
     --                           job has not reached
     --   'locked'                not started, and a quest it follows (prereq
-    --                           or the first step) is not completed
+    --                           or the first step) is not completed, or the
+    --                           fame it needs (req 'Fame N') is higher than
+    --                           the fame read from the Fame Checker
     --   'available'             not started, and nothing above applies
-    -- A quest that needs a level and a quest is 'hidden'. Rank, fame, skill,
-    -- job, mission and pack requirements are not checked.
+    -- A quest that needs a level and a quest is 'hidden'. Rank, skill, job,
+    -- mission and pack requirements are not checked.
+
+    -- The nation whose fame a quest needs, for the quests of the four
+    -- nations with a Fame Checker (fame.lua keys); the quests of the other
+    -- areas are not checked.
+    M.world_lock.fame_of_area = {
+        sandoria = 'sandoria',
+        bastok = 'bastok',
+        windurst = 'windurst',
+        jeuno = 'jeuno',
+    }
+
+    -- true when the quest needs more fame than the player has. false when
+    -- it needs none, or when the fame of that nation was not read yet (it
+    -- cannot be told, so the quest is not locked).
+    function M.world_lock.fame_missing(info)
+        if type(info.req) ~= 'string' then
+            return false
+        end
+
+        local needed = tonumber(info.req:match('[Ff]ame%s*(%d+)'))
+        -- A quest of one nation can need the fame of another one (fame_area
+        -- in the quest data, e.g. 'norg').
+        local key = info.fame_area or M.world_lock.fame_of_area[info.area]
+        local have = key ~= nil and M.fame_levels and M.fame_levels[key]
+
+        if needed == nil or not have or not have.level then
+            return false
+        end
+
+        return have.level < needed
+    end
+
     function M.world_lock.quest_state(index, id)
         local info = index.by_id[id]
 
@@ -5724,6 +6042,10 @@ do
 
         if level ~= nil and needed ~= nil and level < needed then
             return 'hidden'
+        end
+
+        if M.world_lock.fame_missing(info) then
+            return 'locked'
         end
 
         local before_ids = {}
@@ -6044,6 +6366,18 @@ do
 
         for _, point in ipairs(list) do
             local state = M.GetNpcMarkState(point.name, point.kind, point.id)
+
+            -- A Fame Checker starts no quest: it has its own icon.
+            if M.IsFameChecker(point.name) then
+                state = 'fame'
+            end
+
+            -- A Gate Guard: the icon of the mission available or not.
+            local giver_icon = M.GetMissionGiverIcon(point.name)
+
+            if giver_icon ~= nil then
+                state = giver_icon
+            end
 
             if state == 'hidden' then
                 M.world_lock.hidden = M.world_lock.hidden + 1
@@ -6443,6 +6777,8 @@ function M.HandleCommand(e)
         require('encoding').chat_print(i18n.t('/journal settings - Open the settings window'))
         require('encoding').chat_print(i18n.t('/journal guide - Open the guide for new adventurers'))
         require('encoding').chat_print(i18n.t('/journal camps - Open the camps guide'))
+        require('encoding').chat_print(i18n.t('/journal notes - Open your general notes'))
+        require('encoding').chat_print(i18n.t('/journal rank - Show your nation rank'))
         require('encoding').chat_print(i18n.t('/journal active - Open the Active Now window'))
         require('encoding').chat_print(i18n.t('/journal favorites - Open your favorites'))
         require('encoding').chat_print(i18n.t('/journal compass [off|reset|debug] - Show or hide the compass (reset: fit the window to its content)'))
@@ -6476,6 +6812,11 @@ function M.HandleCommand(e)
 
     if command == 'camps' then
         M.ToggleCamps()
+        return
+    end
+
+    if command == 'notes' then
+        M.notes.Toggle()
         return
     end
 
@@ -7305,6 +7646,50 @@ do
             end
         end
 
+        -- The Gate Guards give the missions: they go to the compass when
+        -- the player is close (row.mission, no quests).
+        for _, names in pairs(M.mission_givers.areas) do
+            for _, npc in ipairs(names) do
+                local key = zonematch.normalize(npc)
+                local found = by_npc[key] == nil
+                    and M.compass.Lookup(npc, zone, { x = 0, z = 0 })
+
+                if found and found.x ~= nil then
+                    local row = {
+                        name = npc, x = found.x, y = found.y,
+                        quests = {}, mission = true,
+                    }
+
+                    by_npc[key] = row
+                    list[#list + 1] = row
+                end
+            end
+        end
+
+        -- The Fame Checkers start no quest, but they go to the compass like
+        -- the others when the player is close (row.fame, no quests).
+        local ok_fame, fame_areas = pcall(function()
+            return require('fame').AREAS
+        end)
+
+        for _, area in ipairs(ok_fame and fame_areas or {}) do
+            for _, checker in ipairs(area.checkers) do
+                local key = zonematch.normalize(checker.npc)
+                local found = by_npc[key] == nil
+                    and M.compass.Lookup(checker.npc, zone, { x = 0, z = 0 })
+
+                if found and found.x ~= nil then
+                    local row = {
+                        name = checker.npc, x = found.x, y = found.y,
+                        quests = {}, fame = true,
+                    }
+
+                    by_npc[key] = row
+                    list[#list + 1] = row
+                end
+            end
+        end
+
         return list
     end
 
@@ -7487,8 +7872,13 @@ do
             local dy = me.z - row.y
             local d2 = dx * dx + dy * dy
             local limit = prox.auto[row.name] and prox.keep or prox.radius
-            local names = d2 <= limit * limit and not prox.dismissed[row.name]
-                and prox.start_names(row, true) or nil
+            local names = nil
+
+            if d2 <= limit * limit and not prox.dismissed[row.name] then
+                -- A Fame Checker or a Gate Guard has no quests to list.
+                names = (row.fame or row.mission) and {}
+                    or prox.start_names(row, true)
+            end
 
             if names ~= nil then
                 cands[#cands + 1] = { row = row, d2 = d2, quests = names }
@@ -7964,6 +8354,7 @@ function M.OnCatseyeText(message)
 end
 
 function M.Initialize()
+    M.notes.Load()
     tracker.Initialize()
     require('questdump').install()
     require('catseye_track').set_quests(require('data.quests').QUESTS.catseye)
@@ -8079,6 +8470,8 @@ function M.Update()
 end
 
 function M.Unload()
+    M.notes.Flush()
+
     if tracker_is_ready() then
         if tracker.IsMissionDirty == nil
             or tracker.IsMissionDirty() then

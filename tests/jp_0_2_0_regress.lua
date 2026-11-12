@@ -251,8 +251,8 @@ check('invalid load keeps journal scale', math.abs(logic.GetTextScale() - 0.9) <
 check('invalid load keeps position fields', logic.GetJournalWindowState().x == 12)
 
 local credit = require('jp_credit')
-check('jp credit 0.3.1', credit.version == '0.3.1' and credit.display('0.3.4'):find('0.3.4', 1, true) ~= nil)
-check('jp credit keeps tsukasa', credit.display('0.3.4'):find('[jpver 0.3.1 by Tsukasa]', 1, true) ~= nil)
+check('jp credit 0.3.2', credit.version == '0.3.2' and credit.display('0.3.7'):find('0.3.7', 1, true) ~= nil)
+check('jp credit keeps tsukasa', credit.display('0.3.7'):find('[jpver 0.3.2 by Tsukasa]', 1, true) ~= nil)
 check('jp contributor hando', credit.contributor_line:find('協力者: hando', 1, true) ~= nil)
 local mini_src = io.open('/workspace/Journal/mini_icon.lua'):read('*a')
 check('book has no tooltip', mini_src:find('BeginTooltip', 1, true) == nil and mini_src:find('SetTooltip', 1, true) == nil)
@@ -300,7 +300,8 @@ check('compass drag does not restamp', compass.GetWindowScaleEpoch() == epoch + 
 check('compass drag updates scale', math.abs(compass.GetWindowScale() - 1.58) < 0.001)
 compass.Load(compass_snap)
 local journal_src = io.open('/workspace/Journal/journal.lua'):read('*a')
-check('addon version 0.3.4', journal_src:find("addon.version = '0.3.4'", 1, true) ~= nil)
+check('addon version 0.3.7', journal_src:find("addon.version = '0.3.7'", 1, true) ~= nil)
+check('text scale does not resize windows', ui_src:find('scalex', 1, true) == nil)
 check('addon author kxteel', journal_src:find("addon.author  = 'Kxteel'", 1, true) ~= nil)
 local logic_src = io.open('/workspace/Journal/logic.lua'):read('*a')
 check('no new compass setting', logic_src:find('prox_compass_open', 1, true) == nil)
@@ -318,7 +319,7 @@ local function count_keys(path)
     end
     return n
 end
-check('translation keys 7692', count_keys('/workspace/Journal/data/translations_ja.lua') == 7692)
+check('translation keys kept and extended', count_keys('/workspace/Journal/data/translations_ja.lua') == 7765)
 check('ui keys', count_keys('/workspace/Journal/data/ui_ja.lua') > 0)
 check('tracker opens journal list', type(logic.OpenPinInJournal) == 'function')
 check('prox range', logic.prox_range.radius == 30 and logic.prox_range.keep == 35)
@@ -550,6 +551,107 @@ local event = dump.changes('c1', 'c2')
 check('dump event number', table.concat(event.lines, '\n'):find('0x05C 数値 2: 0 → 4', 1, true) ~= nil)
 dump.reset()
 check('dump off again', dump.is_enabled() == false)
+
+local rich = require('richtext')
+local item_styles = {
+    { kind = 'item', index = { { name = 'honey' }, { name = 'mythril sword' } } },
+}
+local function marked(text, have)
+    return rich.annotate(text, item_styles, function(name, quantity)
+        local owned = have[name] or 0
+        if owned >= quantity then
+            return 'ok', owned
+        end
+        return 'partial', owned
+    end)
+end
+check('ja count is not one of five', marked('Honey5個を用意。', { Honey = 1 }):find('(1/5)', 1, true) ~= nil)
+local ja_styles = require('style_ja').extend({ { index = {}, kind = 'item' } }, 'ja')
+local function marked_ja(text, have)
+    return rich.annotate(text, ja_styles, function(name, quantity)
+        local owned = have[name] or 0
+        if owned >= quantity then
+            return 'ok', owned
+        end
+        return 'partial', owned
+    end)
+end
+check('jp flint name parses four', marked_ja('Aquillinaに火打石4個を渡して100ギル。', { ['火打石'] = 4 }):find('VV', 1, true) ~= nil)
+check('jp flint short is not enough', marked_ja('火打石4個を用意。', { ['火打石'] = 1 }):find('(1/4)', 1, true) ~= nil)
+check('jp flint none stays unmarked', marked_ja('火打石4個を用意。', { ['火打石'] = 0 }) == '火打石4個を用意。')
+local inventory = require('inventory')
+inventory.SetTestIndex({
+    names = { ['flint stone'] = { 880 } },
+    counts = { [880] = 4 },
+})
+local flint_state, flint_have = inventory.Status('火打石', 4)
+check('status flint ja enough', flint_state == 'ok' and flint_have == 4)
+local flint_en_state = inventory.Status('Flint Stone', 4)
+check('status flint english enough', flint_en_state == 'ok')
+inventory.SetTestIndex({
+    names = { ['flint stone'] = { 880 } },
+    counts = { [880] = 1 },
+})
+local flint_short, flint_short_have = inventory.Status('火打石', 4)
+check('status flint ja one of four', flint_short == 'partial' and flint_short_have == 1)
+inventory.SetTestIndex({
+    names = { ['flint stone'] = { 880 } },
+    counts = { [880] = 0 },
+})
+local flint_none, flint_none_have = inventory.Status('火打石', 4)
+check('status flint ja none', flint_none == 'partial' and flint_none_have == 0)
+inventory.SetTestIndex({
+    names = { ['flint stone'] = { 880 } },
+    counts = { [880] = 4 },
+    apply_aliases = false,
+})
+check('status flint ja fallback', inventory.Status('火打石', 4) == 'ok')
+inventory.SetTestIndex({
+    names = {
+        ['flint stone'] = { 880 },
+        ['火打石'] = { 881 },
+    },
+    counts = { [880] = 4, [881] = 1 },
+})
+local kept_state, kept_have = inventory.Status('火打石', 4)
+check('status flint keeps resource japanese', kept_state == 'partial' and kept_have == 1)
+check('status unknown japanese item', inventory.Status('見たことのない品', 1) == nil)
+check('normalize drops trailing nul', inventory.normalize('Flint Stone\0') == 'flint stone')
+check('jp hides one of three', marked_ja('トカゲの皮3枚を用意。', { ['トカゲの皮'] = 1 }):find('(1/3)', 1, true) ~= nil)
+check('jp hides three is enough', marked_ja('トカゲの皮3枚を用意。', { ['トカゲの皮'] = 3 }):find('VV', 1, true) ~= nil)
+check('jp hides none stays unmarked', marked_ja('トカゲの皮3枚を用意。', { ['トカゲの皮'] = 0 }) == 'トカゲの皮3枚を用意。')
+check('sheet count after particle', rich.quantity_after('大羊の毛皮を3枚用意する。', #'大羊の毛皮') == 3)
+check('tube count', rich.quantity_after('空の試験管5本', #'空の試験管') == 5)
+check('feather count after particle', rich.quantity_after('ヒポグリフの尾羽根を2本渡す。', #'ヒポグリフの尾羽根') == 2)
+check('toad count', rich.quantity_after('ヒキガエル3匹と茗荷1個', #'ヒキガエル') == 3)
+check('letter count', rich.quantity_after('手紙4通', #'手紙') == 4)
+check('map ordinal is not a count', rich.quantity_after('2枚目のマップ', 0) == nil)
+local skin_styles = {
+    { kind = 'item', index = { { name = 'lizard skin' } } },
+}
+check('english skin sheets one of three', rich.annotate(
+    'Lizard Skin3枚を用意。',
+    skin_styles,
+    function(_, quantity)
+        if 1 >= quantity then return 'ok', 1 end
+        return 'partial', 1
+    end
+):find('(1/3)', 1, true) ~= nil)
+check('flash step uses flint', words['Obtain Flint Stone x4. It drops from worm type enemies such as Tunnel Worm, Carrion Worm and Stone Eater, and can also be found at the Auction House (Materials, Goldsmithing).']:find('火打石4個', 1, true) ~= nil)
+check('shady step uses zinc', words['Obtain Zinc Ore x4. It can be bought from Teerth in Bastok Markets for 200 gil, from Celestina in Mhaura for 200 gil, or at the Auction House, or you can mine it from a Mineral Vein.']:find('亜鉛鉱4個', 1, true) ~= nil)
+check('ja count check when enough', marked('Honey5個を用意。', { Honey = 5 }):find('VV', 1, true) ~= nil)
+check('ja trade is not a reward skip', marked('RaimbroyにHoney5個を渡し400ギルを受け取る。', { Honey = 5 }):find('VV', 1, true) ~= nil)
+check('reward receive stays unmarked', marked('receive the Mythril Sword.', { ['Mythril Sword'] = 1 }) == 'receive the Mythril Sword.')
+check('ja receive stays unmarked', marked('Mythril Swordを受け取る。', { ['Mythril Sword'] = 1 }) == 'Mythril Swordを受け取る。')
+
+check('fame 2 is not bastok for every quest', words['Fame 2'] == '名声2')
+check('bastok fame stays on that quest', words['quest:bsz_pb_guest_of_hauteur:req'] == 'バストゥーク名声3')
+check('sandoria fame level follows data', words['quest:sdz_ss_timely_visit:req'] == 'サンドリア名声4')
+check('norg fame is named', words['Fame 2 (Norg)'] == 'ノーグ名声2')
+check('porika step is translated', words['Return to Tosuka-Porika (G-8).'] == 'Tosuka-Porika(G-8)のもとへ戻る。')
+check('notes menu is japanese', require('data.ui_ja')['General notes'] == 'メモ')
+check('yes button remains', require('data.ui_ja')['Yes'] == 'はい')
+check('no thanks remains', require('data.ui_ja')['No thanks'] == 'いいえ')
 
 if fails > 0 then
     io.write('FAILED ', fails, '\n')

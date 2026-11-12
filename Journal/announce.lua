@@ -38,7 +38,7 @@ local tx = i18n.t
 -- Sizes are for a 1080 px tall screen, and grow or shrink with the screen.
 local WIDTH = 640
 local HEIGHT_PLAIN = 150
-local HEIGHT_ASK = 215
+local HEIGHT_ASK = 200
 local TITLE_SIZE = 50
 local NAME_SIZE = 24
 local TEXT_SIZE = 18
@@ -211,6 +211,8 @@ local function fit_text(font, size, text, max_width)
     return result
 end
 
+-- Japanese keeps both answers. 「Yes」 comes from i18n; 「No thanks」 stays.
+-- No answer within ASK_TIMEOUT counts as No and the banner leaves.
 local function draw_buttons(controller, scale, width, t)
     local pin_label = tx(i18n.get_language() == 'ja' and 'Yes' or 'Pin to Tracker')
     local no_label = tx('No thanks')
@@ -587,14 +589,67 @@ function M.Draw(controller, can_draw)
                 )
             end
         else
+            -- A new or completed quest or mission has its icon left of the
+            -- name; name and icon are centered together.
+            local icon_name
+
+            if entry.kind == 'mission' then
+                icon_name = entry.done and 'mission_completed'
+                    or 'mission_available'
+            else
+                icon_name = entry.done and 'completed' or 'available'
+            end
+
+            local icon = controller.worldmark ~= nil
+                and controller.worldmark.GetIcon ~= nil
+                and controller.worldmark.GetIcon(icon_name)
+                or nil
+            local icon_gap = 8 * scale
+            local icon_offset = 0
+
+            if icon ~= nil then
+                local line_h = NAME_SIZE * scale * 1.25
+
+                sized(regular, NAME_SIZE * scale, function()
+                    local _, h = imgui.CalcTextSize('Ag')
+
+                    line_h = h or line_h
+                end)
+
+                icon_offset = (line_h * icon.width / icon.height + icon_gap) * 0.5
+            end
+
             centered_text(
                 regular,
                 NAME_SIZE * scale,
                 colors.name,
-                fit_text(regular, NAME_SIZE * scale, tostring(entry_name(entry)), width - 40 * scale),
+                fit_text(
+                    regular,
+                    NAME_SIZE * scale,
+                    tostring(entry_name(entry)),
+                    width - 80 * scale
+                ),
                 width,
-                alpha
+                alpha,
+                icon_offset
             )
+
+            if icon ~= nil then
+                pcall(function()
+                    local min_x, min_y = imgui.GetItemRectMin()
+                    local _, max_y = imgui.GetItemRectMax()
+                    local icon_w = (max_y - min_y) * icon.width / icon.height
+
+                    imgui.GetWindowDrawList():AddImage(
+                        icon.id,
+                        { min_x - icon_w - icon_gap, min_y },
+                        { min_x - icon_gap, max_y },
+                        { 0, 0 },
+                        { 1, 1 },
+                        imgui.GetColorU32({ 1, 1, 1, alpha })
+                    )
+                end)
+            end
         end
 
         imgui.Spacing()
@@ -612,8 +667,8 @@ function M.Draw(controller, can_draw)
 
             imgui.Spacing()
 
-            sized(regular, TEXT_SIZE * scale, function()
-                draw_buttons(controller, scale, width, t)
+            sized(regular, TEXT_SIZE * scale * 0.62, function()
+                draw_buttons(controller, scale, width, t, alpha)
             end)
         elseif entry.note ~= nil then
             centered_text(

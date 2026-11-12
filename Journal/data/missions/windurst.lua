@@ -126,7 +126,7 @@ M.STEPS = {
         mission_type = 'Quest',
         reward = "Rank Points",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.WINDURST_GATE_GUARD.text .. ".",
             "Travel to the Orastery in Port Windurst and speak with " .. ACTOR.HAKKURU_RINKURU.text .. ".",
             "Travel to East Sarutabaruta and enter Inner Horutoto Ruins through the eastern magic tower.",
             "Proceed to the Cracked Wall at (H-9) and examine it to enter the passage.",
@@ -143,7 +143,7 @@ M.STEPS = {
         mission_type = 'Quest',
         reward = "Rank Points",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.WINDURST_GATE_GUARD.text .. ".",
             "Travel to the Manustery in Windurst Woods and speak with " .. ACTOR.APURURU.text .. ".",
             "Travel to East Sarutabaruta and enter the southeastern magic tower of Outer Horutoto Ruins.",
             "Place the six Dark Mana Orbs on the corresponding pedestals.",
@@ -161,12 +161,12 @@ M.STEPS = {
         mission_type = 'Quest',
         reward = "Rank 2, 1,000 gil",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.WINDURST_GATE_GUARD.text .. ".",
             "Travel to the roof of the Rhinostery in Windurst Waters and speak with " .. ACTOR.LEEPE_HOPPE.text .. ".",
             "Travel to Giddeus and deliver the Food Offering to " .. ACTOR.LAA_MOZI.text .. " at (H-7).",
             "Deliver the Drink Offering to " .. ACTOR.GHOO_PAKYA.text .. " at (G-7).",
             "Return to the Rhinostery and speak with " .. ACTOR.LEEPE_HOPPE.text .. ".",
-            "Return to " .. ACTOR.GATE_GUARD.text .. ".",
+            "Return to " .. ACTOR.WINDURST_GATE_GUARD.text .. ".",
         },
     },
 
@@ -181,7 +181,7 @@ M.STEPS = {
         mission_type = 'Quest',
         reward = "Rank Points",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.WINDURST_GATE_GUARD.text .. ".",
             "Travel to the Optistery in Windurst Waters and speak with " .. ACTOR.TOSUKA_PORUKA.text .. ".",
             "Speak with " .. ACTOR.NANAA_MIHGO.text .. ".",
             "Travel through Maze of Shakhrami to the Fossil Rocks around (G-6).",
@@ -201,7 +201,7 @@ M.STEPS = {
         mission_type = 'Repeatable',
         reward = "Rank Points",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.WINDURST_GATE_GUARD.text .. ".",
             "Speak with " .. ACTOR.MORENO_TOENO.text .. " in the Aurastery at (L-6).",
             "Travel to Tahrongi Canyon.",
             "Defeat at least 30 monsters before the trial ends.",
@@ -216,7 +216,7 @@ M.STEPS = {
         mission_type = 'BCNM',
         reward = "Rank 3, 3,000 gil, Adventurer's Certificate",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.WINDURST_GATE_GUARD.text .. ".",
             "Speak with " .. ACTOR.KUPIPI.text .. " in Heavens Tower.",
 
             "Bastok Path:",
@@ -255,7 +255,7 @@ M.STEPS = {
         mission_type = 'Quest',
         reward = "Rank Points, Starway Stairway bauble",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.WINDURST_GATE_GUARD.text .. ".",
             "Speak with " .. ACTOR.KUPIPI.text .. " in Heavens Tower.",
             "Proceed to the upper portion of Heavens Tower and speak with " .. ACTOR.RYH_EPOCAN.text .. ".",
             "Speak with " .. ACTOR.HAKKURU_RINKURU.text .. ".",
@@ -271,7 +271,7 @@ M.STEPS = {
         mission_type = 'Repeatable',
         reward = "Rank Points, Portal charm",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.WINDURST_GATE_GUARD.text .. ".",
             "Speak with " .. ACTOR.ZUBABA.text .. ".",
             "Travel to East Sarutabaruta and enter Inner Horutoto Ruins.",
             "Pass through the Three Mages Gate and proceed to the small room around (G-7).",
@@ -287,7 +287,7 @@ M.STEPS = {
         mission_type = 'Fight',
         reward = "Rank 4, 5,000 gil",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.WINDURST_GATE_GUARD.text .. ".",
             "Enter the Vestal Chamber at the top of Heavens Tower.",
             "Speak with " .. ACTOR.PAKH_JATALFIH.text .. ".",
             "Use Delkfutt's Key to enter the Cermet Door at (L-7) in the basement of Delkfutt's Tower.",
@@ -337,7 +337,7 @@ M.STEPS = {
         mission_type = 'BCNM',
         reward = "Rank Points",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.WINDURST_GATE_GUARD.text .. ".",
             "Enter the Vestal Chamber at the top of Heavens Tower.",
             "Travel to Fei'Yin and enter the ruins.",
             "Proceed to Qu'Bia Arena and complete the Rank 5 battlefield.",
@@ -370,7 +370,7 @@ M.STEPS = {
         mission_type = 'Fight',
         reward = "Rank Points",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.WINDURST_GATE_GUARD.text .. ".",
             "Speak with " .. ACTOR.HAKKURU_RINKURU.text .. " in the Orastery.",
             "Travel to West Sarutabaruta and enter the southwestern tower of Outer Horutoto Ruins.",
             "Examine the Cracked Wall at (I-8).",
@@ -389,7 +389,7 @@ M.STEPS = {
         mission_type = 'BCNM',
         reward = "Rank 7, 40,000 gil, Ashura Necklace",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.WINDURST_GATE_GUARD.text .. ".",
             "Enter the Vestal Chamber at the top of Heavens Tower.",
             "Travel to Balga's Dais in Giddeus and complete the Saintly Invitation battlefield.",
             "Travel to Castle Oztroja and obtain the Judgment Key from the Flagellants around (H-5).",
@@ -411,7 +411,7 @@ M.STEPS = {
         mission_type = 'Fight',
         reward = "Rank Points",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.WINDURST_GATE_GUARD.text .. ".",
             "Speak with " .. ACTOR.TOSUKA_PORUKA.text .. " in the Optistery.",
             "Enter Toraimarai Canal.",
             "Reach Map 2 around (G-8).",
@@ -428,7 +428,7 @@ M.STEPS = {
         mission_type = 'Fight',
         reward = "Rank 8, 60,000 gil",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.WINDURST_GATE_GUARD.text .. ".",
             "Speak with " .. ACTOR.LEEPE_HOPPE.text .. " on the roof of the Rhinostery in Windurst Waters.",
             "Speak with " .. ACTOR.KERUTOTO.text .. " in the northern Rhinostery building.",
             "Travel to Kazham and speak with " .. ACTOR.ROMAA_MIHGO.text .. " at (H-11) in Mihgo's Residence.",
@@ -452,7 +452,7 @@ M.STEPS = {
         mission_type = 'Fight',
         reward = "Rank Points",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.WINDURST_GATE_GUARD.text .. ".",
             "Speak with " .. ACTOR.MORENO_TOENO.text .. " in the Aurastery at (L-6).",
             "Travel to Ro'Maeve and examine Gu'Hau Spring.",
             "Travel to Davoi and enter Monastic Cavern through the second entrance.",
@@ -470,7 +470,7 @@ M.STEPS = {
         mission_type = 'Fight',
         reward = "Rank 9, 80,000 gil",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.WINDURST_GATE_GUARD.text .. ".",
             "Speak with " .. ACTOR.APURURU.text .. " in Windurst Woods.",
             "Speak with " .. ACTOR.TOSUKA_PORUKA.text .. " in Windurst Waters.",
             "Travel to Fei'Yin and speak with Rukususu at (F-6) on Map 2 through the Cermet Door.",
@@ -504,7 +504,7 @@ M.STEPS = {
         mission_type = 'Quest',
         reward = "Rank Points",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.WINDURST_GATE_GUARD.text .. ".",
             "Speak with " .. ACTOR.APURURU.text .. " in Windurst Woods.",
             "Enter the Vestal Chamber at the top of Heavens Tower.",
             "Return to " .. ACTOR.APURURU.text .. ".",
@@ -522,7 +522,7 @@ M.STEPS = {
         mission_type = 'BCNM',
         reward = "Rank 10, 100,000 gil, Windurstian Flag, Ability to buy Atma of the Full Moon",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.WINDURST_GATE_GUARD.text .. ".",
             "Enter the Vestal Chamber at the top of Heavens Tower.",
 
             "Visit Qu'Hua Spring in Ro'Maeve and obtain the Ancient Verse of Ro'Maeve.",

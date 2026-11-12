@@ -473,9 +473,10 @@ end
 -- The click on an NPC name goes to the controller (set while drawing).
 local click_npc = nil
 
-local function text_wrapped(color, text, id)
+local function text_wrapped(color, text, id, items)
     richtext.draw_wrapped(text, {
         styles = styles,
+        items = items,
         color = color,
         italic_color = italic_tint,
         size = current_size,
@@ -699,7 +700,7 @@ local function draw_pin(controller, index, entry)
 
     right_text(colors.next, string.format(i18n.t('Step %d / %d'), step, total))
 
-    text_wrapped(colors.step, step_text(steps[step]), 'p' .. index .. 's')
+    text_wrapped(colors.step, step_text(steps[step]), 'p' .. index .. 's', true)
 
     -- The next step is shown unless the Journal switched it off.
     local show_next =
@@ -708,7 +709,7 @@ local function draw_pin(controller, index, entry)
 
     if show_next and steps[step + 1] ~= nil then
         right_text(colors.next, i18n.t('Next:'))
-        text_wrapped(colors.next, step_text(steps[step + 1]), 'p' .. index .. 'n')
+        text_wrapped(colors.next, step_text(steps[step + 1]), 'p' .. index .. 'n', true)
     end
 
     align_right(
