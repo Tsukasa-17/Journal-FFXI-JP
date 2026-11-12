@@ -8134,10 +8134,398 @@ local function draw_search_results(width)
     imgui.PopStyleColor()
 end
 
+-- Drag of the line between the list and the details. Kept across frames.
+-- Helpers live on one table so the file stays under LuaJIT's local limit.
+local journal_split_drag = nil
+local split_move = {}
+
+function split_move.read_pair(first, second)
+    if type(first) == 'number' then
+        return first, second
+    end
+
+    if type(first) == 'table' or type(first) == 'userdata' then
+        local ok, x, y = pcall(function()
+            return first.x or first[1], first.y or first[2]
+        end)
+
+        if ok then
+            return tonumber(x), tonumber(y)
+        end
+    end
+
+    return nil, nil
+end
+
+function split_move.window_pos()
+    if imgui.GetWindowPos == nil then
+        return nil, nil
+    end
+
+    local ok, first, second = pcall(imgui.GetWindowPos)
+
+    if not ok then
+        return nil, nil
+    end
+
+    return split_move.read_pair(first, second)
+end
+
+-- Empty space in an ImGui window starts a window drag. A click in the
+-- divider's padding is empty space, so the book would move with the mouse.
+-- Limiting moves to the title bar for that drag cancels it, and the active
+-- id ImGui sets still keeps the game camera still. Restored afterwards.
+function split_move.hold()
+    pcall(function()
+        if imgui.GetIO == nil then
+            return
+        end
+
+        local io = imgui.GetIO()
+
+        if io == nil or io.ConfigWindowsMoveFromTitleBarOnly == nil then
+            return
+        end
+
+        if split_move.saved == nil then
+            split_move.saved = io.ConfigWindowsMoveFromTitleBarOnly == true
+        end
+
+        io.ConfigWindowsMoveFromTitleBarOnly = true
+    end)
+end
+
+function split_move.release()
+    if split_move.saved == nil then
+        return
+    end
+
+    local saved = split_move.saved
+    split_move.saved = nil
+
+    pcall(function()
+        if imgui.GetIO == nil then
+            return
+        end
+
+        local io = imgui.GetIO()
+
+        if io ~= nil then
+            io.ConfigWindowsMoveFromTitleBarOnly = saved
+        end
+    end)
+end
+
+function split_move.cursor()
+    pcall(function()
+        if type(imgui.SetMouseCursor) ~= 'function' then
+            return
+        end
+
+        local cursor = ImGuiMouseCursor_ResizeEW
+
+        if type(cursor) ~= 'number' then
+            return
+        end
+
+        imgui.SetMouseCursor(cursor)
+    end)
+end
+
+function split_move.flag(fn, ...)
+    if type(fn) ~= 'function' then
+        return false
+    end
+
+    local ok, value = pcall(fn, ...)
+
+    return ok and (value == true or value == 1)
+end
+
+-- The 10px gap is the visible divider. The grab band is a few pixels wider
+-- and stays inside the child padding, so list rows and detail text keep
+-- their clicks. The resize cursor is optional; the line still lights up.
+local function draw_pane_splitter(content_width, details_width, pane_h)
+    local gap = require('window_fit').JOURNAL_PANE_GAP or 10
+    local extra = 6
+
+    pane_h = tonumber(pane_h) or 200
+
+    if pane_h < 1 then
+        pane_h = 1
+    elseif pane_h > 8000 then
+        pane_h = 8000
+    end
+
+    imgui.SameLine(0, 0)
+
+    local gap_x, gap_y = nil, nil
+
+    if imgui.GetCursorScreenPos ~= nil then
+        local ok, first, second = pcall(imgui.GetCursorScreenPos)
+
+        if ok then
+            gap_x, gap_y = split_move.read_pair(first, second)
+        end
+    end
+
+    local button_hovered = false
+    local drew_gap = false
+
+    if type(imgui.InvisibleButton) == 'function' then
+        imgui.InvisibleButton(
+            '##JournalPaneSplit',
+            { gap, pane_h }
+        )
+
+        button_hovered = split_move.flag(imgui.IsItemHovered)
+        drew_gap = true
+    elseif type(imgui.Dummy) == 'function' then
+        imgui.Dummy({ gap, pane_h })
+        drew_gap = true
+    end
+
+    local rect_x, rect_y = gap_x, gap_y
+    local rect_r = gap_x and (gap_x + gap) or nil
+    local rect_b = gap_y and (gap_y + pane_h) or nil
+
+    -- Only the gap item. The list child is the previous item, and its rect
+    -- would swallow row clicks if we treated it as the divider.
+    if drew_gap and imgui.GetItemRectMin ~= nil and imgui.GetItemRectMax ~= nil then
+        local ok_min, min_a, min_b = pcall(imgui.GetItemRectMin)
+        local ok_max, max_a, max_b = pcall(imgui.GetItemRectMax)
+
+        if ok_min and ok_max then
+            local x0, y0 = split_move.read_pair(min_a, min_b)
+            local x1, y1 = split_move.read_pair(max_a, max_b)
+
+            if x0 and y0 and x1 and y1 then
+                rect_x, rect_y, rect_r, rect_b = x0, y0, x1, y1
+            end
+        end
+    end
+
+    local mouse_x, mouse_y = nil, nil
+
+    if imgui.GetMousePos ~= nil then
+        local ok, first, second = pcall(imgui.GetMousePos)
+
+        if ok then
+            mouse_x, mouse_y = split_move.read_pair(first, second)
+        end
+    end
+
+    local down = imgui.IsMouseDown ~= nil
+        and split_move.flag(imgui.IsMouseDown, 0)
+
+    if not down and imgui.IsMouseDown == nil then
+        down = split_move.flag(imgui.IsItemActive)
+    end
+
+    local clicked = split_move.flag(imgui.IsMouseClicked, 0)
+
+    local other_hovered = false
+
+    if imgui.IsAnyItemHovered ~= nil then
+        other_hovered = split_move.flag(imgui.IsAnyItemHovered)
+            and not button_hovered
+    end
+
+    local in_band = mouse_x ~= nil
+        and mouse_y ~= nil
+        and rect_x ~= nil
+        and mouse_x >= rect_x - extra
+        and mouse_x <= rect_r + extra
+        and mouse_y >= rect_y
+        and mouse_y <= rect_b
+
+    -- Widen only when we can tell a row is not under the pointer.
+    local padding_hit = imgui.IsAnyItemHovered ~= nil
+        and in_band
+        and not button_hovered
+        and not other_hovered
+
+    if journal_split_drag == nil
+        and clicked
+        and mouse_x ~= nil
+        and (button_hovered or padding_hit) then
+
+        local win_x, win_y = split_move.window_pos()
+
+        journal_split_drag = {
+            mouse_x = mouse_x,
+            details = details_width,
+            win_x = win_x,
+            win_y = win_y,
+        }
+    end
+
+    local dragging = journal_split_drag ~= nil
+    local hot = dragging or button_hovered or padding_hit
+
+    if dragging then
+        split_move.hold()
+
+        -- Same capture a resize grip gets: the game does not turn the camera.
+        pcall(function()
+            if imgui.GetIO == nil then
+                return
+            end
+
+            local io = imgui.GetIO()
+
+            if io ~= nil then
+                io.WantCaptureMouse = true
+            end
+        end)
+    end
+
+    if dragging and controller and controller.SetJournalDetailsRatio then
+        local desired = nil
+
+        if mouse_x ~= nil then
+            desired = journal_split_drag.details
+                - (mouse_x - journal_split_drag.mouse_x)
+        end
+
+        if desired ~= nil then
+            local fit = require('window_fit')
+            local ratio = fit.journal_ratio_for_details(
+                content_width,
+                desired
+            )
+
+            if ratio ~= nil then
+                local _, next_details = fit.journal_panes(
+                    content_width,
+                    ratio
+                )
+
+                if next_details ~= details_width then
+                    controller.SetJournalDetailsRatio(ratio)
+                end
+
+                -- Past either edge, drop the extra travel so the next
+                -- pixel the other way moves the line again.
+                if next_details ~= math.floor(desired + 0.5) then
+                    journal_split_drag.details = next_details
+                    journal_split_drag.mouse_x = mouse_x
+                end
+            end
+        end
+    end
+
+    if journal_split_drag and not down and not clicked then
+        journal_split_drag = nil
+        dragging = false
+        hot = button_hovered or padding_hit
+        split_move.release()
+    end
+
+    if hot then
+        split_move.cursor()
+
+        if rect_x ~= nil and imgui.GetWindowDrawList ~= nil then
+            pcall(function()
+                local draw = imgui.GetWindowDrawList()
+
+                if draw == nil then
+                    return
+                end
+
+                local alpha = dragging and 0.90 or 0.42
+                local color = imgui.GetColorU32({
+                    0.75,
+                    0.84,
+                    0.98,
+                    alpha,
+                })
+                local mid = (rect_x + rect_r) * 0.5
+                local top = rect_y + 8
+                local bottom = rect_b - 8
+
+                if bottom < top then
+                    top = rect_y
+                    bottom = rect_b
+                end
+
+                if draw.AddLine then
+                    draw:AddLine(
+                        { mid, top },
+                        { mid, bottom },
+                        color,
+                        dragging and 3 or 2
+                    )
+                end
+            end)
+        end
+    end
+
+    if drew_gap then
+        imgui.SameLine(0, 0)
+    else
+        imgui.SameLine(0, gap)
+    end
+end
+
+local function journal_pane_height()
+    if imgui.GetContentRegionAvail ~= nil then
+        local ok, first, second = pcall(imgui.GetContentRegionAvail)
+
+        if ok then
+            if type(first) == 'number' and type(second) == 'number' and second > 1 then
+                return second
+            end
+
+            if type(first) == 'table' or type(first) == 'userdata' then
+                local height = nil
+                local ok_h, y = pcall(function()
+                    return first.y or first[2]
+                end)
+
+                if ok_h then
+                    height = tonumber(y)
+                end
+
+                if height and height > 1 then
+                    return height
+                end
+            end
+        end
+    end
+
+    local cursor_y, window_h = nil, nil
+
+    if imgui.GetCursorPosY ~= nil then
+        local ok, value = pcall(imgui.GetCursorPosY)
+
+        if ok and type(value) == 'number' then
+            cursor_y = value
+        end
+    end
+
+    if imgui.GetWindowHeight ~= nil then
+        local ok, value = pcall(imgui.GetWindowHeight)
+
+        if ok and type(value) == 'number' then
+            window_h = value
+        end
+    end
+
+    if cursor_y ~= nil and window_h ~= nil then
+        return math.max(1, window_h - cursor_y - 12)
+    end
+
+    return 200
+end
+
 local function draw_journal()
     if not can_draw_ui()
         or not controller
         or not controller.GetJournalWindowState then
+
+        journal_split_drag = nil
+        split_move.release()
 
         return
     end
@@ -8147,6 +8535,9 @@ local function draw_journal()
 
     if not state
         or not state.visible then
+
+        journal_split_drag = nil
+        split_move.release()
 
         return
     end
@@ -8216,15 +8607,45 @@ local function draw_journal()
         and tx('Mission Journal')
         or tx('Quest Journal')
 
+    -- Known before Begin, so a drag that started last frame cannot move
+    -- the book. The click frame is held by the title-bar limit below.
+    local split_lock, split_x, split_y =
+        require('window_fit').split_drag_lock(
+            journal_split_drag ~= nil,
+            journal_split_drag and journal_split_drag.win_x,
+            journal_split_drag and journal_split_drag.win_y,
+            state.x,
+            state.y
+        )
+
+    if journal_split_drag ~= nil then
+        split_move.hold()
+    end
+
+    if split_lock then
+        imgui.SetNextWindowPos({ split_x, split_y })
+    elseif journal_split_drag == nil then
+        split_move.release()
+    end
+
+    local window_flags =
+        ImGuiWindowFlags_NoSavedSettings
+        + ImGuiWindowFlags_NoScrollbar
+        + ImGuiWindowFlags_NoScrollWithMouse
+        + ImGuiWindowFlags_NoCollapse
+
+    if split_lock and ImGuiWindowFlags_NoMove ~= nil then
+        window_flags = window_flags + ImGuiWindowFlags_NoMove
+    end
 
     if imgui.Begin(
         title .. '###JournalWindow',
         open,
-        ImGuiWindowFlags_NoSavedSettings
-            + ImGuiWindowFlags_NoScrollbar
-            + ImGuiWindowFlags_NoScrollWithMouse
-            + ImGuiWindowFlags_NoCollapse
+        window_flags
     ) then
+        if split_lock and imgui.SetWindowPos ~= nil then
+            pcall(imgui.SetWindowPos, { split_x, split_y })
+        end
 
         local draw =
             imgui.GetWindowDrawList()
@@ -8253,17 +8674,29 @@ local function draw_journal()
         local content_width =
             imgui.GetWindowWidth()
 
-        local spacing = 10
+        local list_width
+        local details_width
 
-        local details_width =
-            math.floor(
-                content_width * 0.32
+        if controller.JournalPaneWidths then
+            list_width, details_width =
+                controller.JournalPaneWidths(content_width)
+        end
+
+        -- Same panes as before a split has been saved.
+        if tonumber(list_width) == nil
+            or tonumber(details_width) == nil then
+
+            local fit = require('window_fit')
+
+            details_width = math.floor(
+                content_width * (fit.JOURNAL_DETAILS_RATIO or 0.32)
             )
+            list_width = content_width
+                - details_width
+                - (fit.JOURNAL_PANE_GAP or 10)
+        end
 
-        local list_width =
-            content_width
-            - details_width
-            - spacing
+        local pane_h = journal_pane_height()
 
         if controller.GetSearchText
             and controller.GetSearchResults
@@ -8277,9 +8710,10 @@ local function draw_journal()
             )
         end
 
-        imgui.SameLine(
-            0,
-            spacing
+        draw_pane_splitter(
+            content_width,
+            details_width,
+            pane_h
         )
 
         if is_mission_mode then
@@ -8303,11 +8737,20 @@ local function draw_journal()
             )
         end
 
+        -- After the details pane, so a drag that crosses it keeps the cursor.
+        if journal_split_drag then
+            split_move.cursor()
+        end
+
         local wx, wy =
             imgui.GetWindowPos()
 
         local ww, wh =
             imgui.GetWindowSize()
+
+        if split_lock then
+            wx, wy = split_x, split_y
+        end
 
         if wx ~= state.x
             or wy ~= state.y
@@ -8727,6 +9170,23 @@ local function sync_journal_mini()
         end
     end
 end
+
+ashita.events.register(
+    'mouse',
+    'journal_ui_split_mouse',
+    function(e)
+        if journal_split_drag == nil or e == nil then
+            return
+        end
+
+        -- Move, left button down, left button up. ImGui already read them.
+        local message = e.message
+
+        if message == 512 or message == 513 or message == 514 then
+            e.blocked = true
+        end
+    end
+)
 
 ashita.events.register(
     'xinput_button',

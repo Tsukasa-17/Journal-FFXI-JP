@@ -251,8 +251,8 @@ check('invalid load keeps journal scale', math.abs(logic.GetTextScale() - 0.9) <
 check('invalid load keeps position fields', logic.GetJournalWindowState().x == 12)
 
 local credit = require('jp_credit')
-check('jp credit 0.3.2', credit.version == '0.3.2' and credit.display('0.3.7'):find('0.3.7', 1, true) ~= nil)
-check('jp credit keeps tsukasa', credit.display('0.3.7'):find('[jpver 0.3.2 by Tsukasa]', 1, true) ~= nil)
+check('jp credit 0.3.3', credit.version == '0.3.3' and credit.display('0.3.7'):find('0.3.7', 1, true) ~= nil)
+check('jp credit keeps tsukasa', credit.display('0.3.7'):find('[jpver 0.3.3 by Tsukasa]', 1, true) ~= nil)
 check('jp contributor hando', credit.contributor_line:find('協力者: hando', 1, true) ~= nil)
 local mini_src = io.open('/workspace/Journal/mini_icon.lua'):read('*a')
 check('book has no tooltip', mini_src:find('BeginTooltip', 1, true) == nil and mini_src:find('SetTooltip', 1, true) == nil)
@@ -303,7 +303,12 @@ local journal_src = io.open('/workspace/Journal/journal.lua'):read('*a')
 check('addon version 0.3.7', journal_src:find("addon.version = '0.3.7'", 1, true) ~= nil)
 check('text scale does not resize windows', ui_src:find('scalex', 1, true) == nil)
 check('addon author kxteel', journal_src:find("addon.author  = 'Kxteel'", 1, true) ~= nil)
+check('journal splitter handle', ui_src:find("##JournalPaneSplit", 1, true) ~= nil)
+check('splitter cursor is optional', ui_src:find('ImGuiMouseCursor_ResizeEW', 1, true) ~= nil)
+check('split drag can hold the window', ui_src:find('split_drag_lock', 1, true) ~= nil)
+check('split drag blocks mouse', ui_src:find('journal_ui_split_mouse', 1, true) ~= nil)
 local logic_src = io.open('/workspace/Journal/logic.lua'):read('*a')
+check('split ratio key', logic_src:find('journal_details_ratio', 1, true) ~= nil)
 check('no new compass setting', logic_src:find('prox_compass_open', 1, true) == nil)
 check('compass auto open remains', logic_src:find('M.SetCompassOpen(true)', 1, true) ~= nil)
 local readme = io.open('/workspace/Journal/README.md'):read('*a')
@@ -652,6 +657,124 @@ check('porika step is translated', words['Return to Tosuka-Porika (G-8).'] == 'T
 check('notes menu is japanese', require('data.ui_ja')['General notes'] == 'メモ')
 check('yes button remains', require('data.ui_ja')['Yes'] == 'はい')
 check('no thanks remains', require('data.ui_ja')['No thanks'] == 'いいえ')
+
+local split = require('window_fit')
+check('split constant is 0.32', split.JOURNAL_DETAILS_RATIO == 0.32 and split.JOURNAL_PANE_GAP == 10)
+local locked, lock_x, lock_y = split.split_drag_lock(true, 40, 80, 200, 300)
+check('drag locks the book', locked == true and lock_x == 40 and lock_y == 80)
+locked, lock_x, lock_y = split.split_drag_lock(false, 40, 80, 200, 300)
+check('idle book stays free', locked == false and lock_x == 200 and lock_y == 300)
+locked, lock_x, lock_y = split.split_drag_lock(true, nil, nil, 12, 18)
+check('drag without a start stays free', locked == false and lock_x == 12 and lock_y == 18)
+locked, lock_x, lock_y = split.split_drag_lock(true, 'no', 10, 4, 6)
+check('bad anchor does not lock', locked == false and lock_x == 4 and lock_y == 6)
+for _, width in ipairs({ 360, 400, 720, 1000, 1100, 1600 }) do
+    local list_w, details_w = split.journal_panes(width, nil)
+    local expect_d = math.floor(width * 0.32)
+    local expect_l = width - expect_d - 10
+    check(
+        'split default ' .. width,
+        list_w == expect_l and details_w == expect_d
+    )
+end
+local half_l, half_d = split.journal_panes(1100, 0.5)
+check('split half applied', half_d == 550 and half_l == 1100 - 550 - 10)
+local wide_l, wide_d = split.journal_panes(360, 0.95)
+check('split clamps wide details', wide_l == 180 and wide_d == 170 and wide_l + wide_d + 10 == 360)
+local narrow_l, narrow_d = split.journal_panes(1100, 0.05)
+check('split clamps narrow details', narrow_d == 96 and narrow_l == 1100 - 10 - 96)
+local bad_l, bad_d = split.journal_panes(1100, 'no')
+check('split bad ratio is default', bad_d == math.floor(1100 * 0.32) and bad_l == 1100 - bad_d - 10)
+check('split zero ratio is default', select(2, split.journal_panes(1100, 0)) == math.floor(1100 * 0.32))
+check('split normalize rejects', split.normalize_journal_ratio(nil) == nil and split.normalize_journal_ratio(1) == nil and split.normalize_journal_ratio(-0.2) == nil)
+local overflow = 0
+for width = 200, 1800, 37 do
+    for _, ratio in ipairs({ nil, 0.05, 0.32, 0.5, 0.8, 0.95 }) do
+        local list_w, details_w = split.journal_panes(width, ratio)
+        if list_w < 1 or details_w < 1 or list_w + details_w + 10 ~= width then
+            overflow = overflow + 1
+        end
+    end
+end
+check('split stays inside the window', overflow == 0)
+local trip = 0
+for width = 360, 1400, 53 do
+    local min_details = 96
+    local max_details = width - 10 - 180
+    if max_details >= min_details then
+        for details = min_details, max_details, 41 do
+            local ratio = split.journal_ratio_for_details(width, details)
+            local _, got = split.journal_panes(width, ratio)
+            if got ~= details then
+                trip = trip + 1
+            end
+        end
+    end
+end
+check('split ratio round trip', trip == 0)
+
+handler({
+    journal_text_scale = 1,
+    journal_width = 1000,
+    journal_height = 700,
+})
+check('split unset by default', logic.GetJournalDetailsRatio() == nil)
+local logic_l, logic_d = logic.JournalPaneWidths(1100)
+check(
+    'logic default split',
+    logic_d == math.floor(1100 * 0.32) and logic_l == 1100 - logic_d - 10
+)
+local before = logic.GetJournalWindowState()
+check('set split ratio', logic.SetJournalDetailsRatio(0.5) == true)
+check('repeat split ratio', logic.SetJournalDetailsRatio(0.5) == false)
+local after = logic.GetJournalWindowState()
+check(
+    'split leaves the outer window',
+    before.width == after.width and before.height == after.height
+)
+logic.SetTextScale(1.15)
+check('text scale leaves split', math.abs(logic.GetJournalDetailsRatio() - 0.5) < 1e-8)
+check('split leaves text scale path', math.abs(logic.GetTextScale() - 1.15) < 0.0001)
+logic_l, logic_d = logic.JournalPaneWidths(1000)
+check('logic applies saved ratio', logic_d == 500 and logic_l == 1000 - 500 - 10)
+logic_l, logic_d = logic.JournalPaneWidths(360)
+check(
+    'logic clamps saved ratio',
+    logic_l == 180 and logic_d == 170 and logic_l + logic_d + 10 == 360
+)
+check('reject bad split', logic.SetJournalDetailsRatio('no') == false)
+check('bad split keeps ratio', math.abs(logic.GetJournalDetailsRatio() - 0.5) < 1e-8)
+local saved_split = {
+    journal_details_ratio = 0.4,
+    journal_text_scale = 1.05,
+    journal_width = 900,
+    journal_height = 600,
+    announce_prox_compass = true,
+}
+handler(saved_split)
+check('loaded split ratio', math.abs(logic.GetJournalDetailsRatio() - 0.4) < 1e-8)
+logic_l, logic_d = logic.JournalPaneWidths(900)
+check(
+    'loaded split applied',
+    logic_d == math.floor(900 * 0.4) and logic_l == 900 - logic_d - 10
+)
+logic.Unload()
+check('split key saved', math.abs(saved_split.journal_details_ratio - 0.4) < 1e-8)
+check('split save leaves text scale', math.abs(saved_split.journal_text_scale - 1.05) < 0.0001)
+check('split save leaves compass', saved_split.announce_prox_compass == true)
+handler({ journal_details_ratio = 0.8, journal_text_scale = 1, journal_width = 1000 })
+logic_l, logic_d = logic.JournalPaneWidths(360)
+check('loaded wide split clamps', logic_l == 180 and logic_d == 170)
+handler({ journal_details_ratio = 'wide', journal_text_scale = 0.9, journal_width = 1000 })
+check('invalid split clears', logic.GetJournalDetailsRatio() == nil)
+logic_d = select(2, logic.JournalPaneWidths(1100))
+check('invalid split uses 0.32', logic_d == math.floor(1100 * 0.32))
+check('invalid split leaves text scale', math.abs(logic.GetTextScale() - 0.9) < 0.0001)
+local fresh_split = { journal_text_scale = 1, journal_width = 800, journal_height = 500 }
+handler(fresh_split)
+logic.Unload()
+check('unset split is not stored', fresh_split.journal_details_ratio == nil)
+check('unset split leaves width', fresh_split.journal_width == 800)
 
 if fails > 0 then
     io.write('FAILED ', fails, '\n')

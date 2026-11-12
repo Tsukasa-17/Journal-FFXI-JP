@@ -198,6 +198,131 @@ function M.note_settings_resize(seen_w, seen_h, width, height)
     return seen_w, seen_h, false
 end
 
+-- Inner split of the Journal book. The details pane is a fraction of the
+-- window width and the list takes the rest, minus a fixed gap. 0.32 is the
+-- historical fraction: until the player drags, the panes stay that size.
+M.JOURNAL_DETAILS_RATIO = 0.32
+M.JOURNAL_PANE_GAP = 10
+
+-- Floors the default split already clears at the journal's smallest window
+-- (360). A saved fraction that no longer fits is clamped to these floors.
+-- If the window cannot hold both floors, they shrink together.
+local JOURNAL_MIN_LIST = 180
+local JOURNAL_MIN_DETAILS = 96
+
+local function finite_number(value)
+    value = tonumber(value)
+    if value == nil or value ~= value or value == math.huge or value == -math.huge then
+        return nil
+    end
+    return value
+end
+
+-- A saved fraction in (0, 1). Anything else means "use the default".
+function M.normalize_journal_ratio(value)
+    value = finite_number(value)
+    if value == nil or value <= 0 or value >= 1 then
+        return nil
+    end
+    return value
+end
+
+local function clamp_journal_panes(content_width, details)
+    local gap = M.JOURNAL_PANE_GAP
+    local available = content_width - gap
+
+    if available < 2 then
+        local list = math.max(0, content_width - gap)
+        if list < 1 and content_width > 0 then
+            return content_width, 0
+        end
+        return list, math.max(0, available - list)
+    end
+
+    local min_list = JOURNAL_MIN_LIST
+    local min_details = JOURNAL_MIN_DETAILS
+
+    if min_list + min_details > available then
+        local scale = available / (min_list + min_details)
+        min_list = math.max(1, math.floor(min_list * scale))
+        min_details = available - min_list
+        if min_details < 1 then
+            min_details = 1
+            min_list = available - 1
+        end
+    end
+
+    if details < min_details then
+        details = min_details
+    elseif details > available - min_list then
+        details = available - min_list
+    end
+
+    return available - details, details
+end
+
+-- list width, details width. ratio nil (or invalid) is the 0.32 default.
+function M.journal_panes(content_width, ratio)
+    content_width = finite_number(content_width)
+    if content_width == nil or content_width <= 0 then
+        return 0, 0
+    end
+    content_width = math.floor(content_width)
+
+    local desired
+    local normalized = M.normalize_journal_ratio(ratio)
+    if normalized == nil then
+        desired = math.floor(content_width * M.JOURNAL_DETAILS_RATIO)
+    else
+        -- The extra millionth keeps a ratio built from (pixels + 0.5) / width
+        -- on the same pixel after it is stored and read back.
+        desired = math.floor(content_width * normalized + 1e-6)
+    end
+
+    return clamp_journal_panes(content_width, desired)
+end
+
+-- While the divider is dragged, the book stays at the position it had when
+-- the drag started. Idle calls return the current position and do not lock.
+function M.split_drag_lock(active, anchor_x, anchor_y, current_x, current_y)
+    current_x = finite_number(current_x)
+    current_y = finite_number(current_y)
+
+    if active ~= true then
+        return false, current_x, current_y
+    end
+
+    anchor_x = finite_number(anchor_x)
+    anchor_y = finite_number(anchor_y)
+
+    if anchor_x == nil or anchor_y == nil then
+        return false, current_x, current_y
+    end
+
+    return true, anchor_x, anchor_y
+end
+
+-- Fraction that journal_panes will turn back into this details width,
+-- after the same clamp. Nil when the width is not usable.
+function M.journal_ratio_for_details(content_width, details)
+    content_width = finite_number(content_width)
+    details = finite_number(details)
+    if content_width == nil or content_width < 1 or details == nil then
+        return nil
+    end
+    content_width = math.floor(content_width)
+
+    local _, clamped = clamp_journal_panes(content_width, details)
+    local ratio = (clamped + 0.5) / content_width
+    ratio = math.floor(ratio * 1000000 + 0.5) / 1000000
+    if ratio <= 0 then
+        ratio = 0.000001
+    elseif ratio >= 1 then
+        ratio = 0.999999
+    end
+    return ratio
+end
+
 -- True when saved size clearly exceeds the display (needs auto-fit).
 function M.needs_auto_fit(w, h, display_w, display_h, margin)
     margin = margin or 16

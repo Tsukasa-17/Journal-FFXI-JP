@@ -880,6 +880,11 @@ end
 -- The second half of apply_config. It is a function of its own because
 -- LuaJIT allows only 60 upvalues in one function.
 local function apply_config_part_two()
+    -- Nil until the player drags the list/details divider. Nil keeps the
+    -- historical 32% details pane; a number is that pane's share of the width.
+    M.journal_details_ratio = require('window_fit').normalize_journal_ratio(
+        config.journal_details_ratio
+    )
     journal_opacity =
         clamp_opacity(config.journal_opacity, OPACITY_MIN, OPACITY_MAX, 1.0)
     pin_opacity =
@@ -1116,6 +1121,9 @@ local function update_config_values()
 
     config.journal_width = journal_width
     config.journal_height = journal_height
+    -- Absent until the divider is dragged, so other saved fields stay as they
+    -- were. After a drag, this is the details pane's share of the width.
+    config.journal_details_ratio = M.journal_details_ratio
     config.journal_open = journal_visible
     config.journal_x = journal_x
     config.journal_y = journal_y
@@ -3244,6 +3252,38 @@ function M.SetJournalGeometry(
     journal_height = height
 
     request_config_save()
+end
+
+-- Nil means the historical 32% details pane. A number in (0, 1) is the
+-- share chosen by dragging the divider.
+function M.GetJournalDetailsRatio()
+    return M.journal_details_ratio
+end
+
+function M.SetJournalDetailsRatio(value)
+    local ratio = require('window_fit').normalize_journal_ratio(value)
+
+    if ratio == nil then
+        return false
+    end
+
+    if M.journal_details_ratio ~= nil
+        and math.abs(M.journal_details_ratio - ratio) < 1e-8 then
+
+        return false
+    end
+
+    M.journal_details_ratio = ratio
+    request_config_save()
+    return true
+end
+
+-- List width and details width for the current saved split.
+function M.JournalPaneWidths(content_width)
+    return require('window_fit').journal_panes(
+        content_width,
+        M.journal_details_ratio
+    )
 end
 
 function M.GetJournalMiniSize() return require('mini_icon').get_size() end
