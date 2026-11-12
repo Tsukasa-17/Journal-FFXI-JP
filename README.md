@@ -1,4 +1,4 @@
-# Journal 0.3.4 by Kxteel [jpver 0.3.1 by Tsukasa]
+# Journal 0.3.7 by Kxteel [jpver 0.3.2 by Tsukasa]
 
 <img src="Journal/assets/journal_icon.png" alt="クエストブック" width="128">
 
@@ -44,14 +44,13 @@ VanaCoreは、Ashitaと同じ呼び出しができる場合に使う想定です
 
 ## 今回増えたこと
 
-- ミッションとクエストの一覧に、進み具合が分かる小さな絵が出ます。絵のファイルが無いときは、今までどおり丸印です。
-- トラッカーや通知、コンパスに並ぶクエストにも、同じ絵が出ます。
-- 近くのクエストをコンパスへ出す範囲が、少し広くなりました。
-- コンパスやトラッカーからクエストを開くと、そのクエストの詳細だけが開きます。詳細の窓の大きさは、アドオンを読み直すまで覚えています。
-- 繰り返せるクエストは、終わったあとでも印が残ります。
-- クエストの欄に CatsEye を足しました。Horutoto Hakken の手順を日本語で読めます。進行の印は付きません。
+上流の 0.3.5 から 0.3.7 までを取り込みました。詳しくは [Journal/CHANGES_JP.md](Journal/CHANGES_JP.md) です。
 
-矢印が指す位置の計算は、これまでと同じです。
+- メニューからメモを開き、タイトルとフォルダ、フォルダの色を付けて保存できます。
+- 手順が求めているアイテムは、足りていれば緑の印、足りなければ持っている数と必要な数が、本とトラッカーに出ます。
+- 名声を教えてくれる人に話すと、その国の名声を覚えます。足りないクエストは鍵の絵になります。
+- 近くのゲートガードが、ミッションの進み具合の絵付きでコンパスに出ます。
+- 自国のランクが足りないミッションは、鍵の絵になります。
 
 ## 使い方
 
@@ -59,6 +58,7 @@ VanaCoreは、Ashitaと同じ呼び出しができる場合に使う想定です
 - `/journal quest` でクエストを開きます。
 - `/journal pin` で、ピン留めした項目を追う小さな窓を出したり隠したりします。開いている項目は `/journal pin add` でピン留めできます。
 - `/journal settings` で設定を開きます。
+- `/journal notes` でメモを開きます。名声は、設定の隣のメニューから開きます。
 - ほかの操作は `/journal help` で一覧できます。
 
 星唄の「1-10」の名前と手順も日本語で出ます。同じ英語名の別の節は、それぞれの日本語名で出ます。地名や人の名前など、一部は英語のまま残ることがあります。
@@ -90,6 +90,6 @@ Journalを閉じると、クエストブックの絵が出ます。クリック�
 
 ## ライセンス
 
-Journalの原著作権は Copyright (c) 2026 Kxteel です。元のMIT許諾は [Journal/LICENSE](Journal/LICENSE) に原文のままあります。日本語版の表示は [jpver 0.3.1 by Tsukasa] です。プログラムの版番号は 0.3.4 です。
+Journalの原著作権は Copyright (c) 2026 Kxteel です。元のMIT許諾は [Journal/LICENSE](Journal/LICENSE) に原文のままあります。日本語版の表示は [jpver 0.3.2 by Tsukasa] です。プログラムの版番号は 0.3.7 です。
 
 ソースをまとめた配布物は GPLv3 です。全文は [Journal/COPYING](Journal/COPYING) にあります。無保証で、条件に従えば見ること、変えること、再配布ができます。MIT、BSD、OFLの各通知は [Journal/THIRD_PARTY_NOTICES.md](Journal/THIRD_PARTY_NOTICES.md) と [Journal/licenses](Journal/licenses) に残しています。これらの通知は消さないでください。

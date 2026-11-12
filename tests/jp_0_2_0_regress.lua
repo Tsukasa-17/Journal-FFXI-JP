@@ -251,8 +251,8 @@ check('invalid load keeps journal scale', math.abs(logic.GetTextScale() - 0.9) <
 check('invalid load keeps position fields', logic.GetJournalWindowState().x == 12)
 
 local credit = require('jp_credit')
-check('jp credit 0.3.1', credit.version == '0.3.1' and credit.display('0.3.4'):find('0.3.4', 1, true) ~= nil)
-check('jp credit keeps tsukasa', credit.display('0.3.4'):find('[jpver 0.3.1 by Tsukasa]', 1, true) ~= nil)
+check('jp credit 0.3.2', credit.version == '0.3.2' and credit.display('0.3.7'):find('0.3.7', 1, true) ~= nil)
+check('jp credit keeps tsukasa', credit.display('0.3.7'):find('[jpver 0.3.2 by Tsukasa]', 1, true) ~= nil)
 check('jp contributor hando', credit.contributor_line:find('協力者: hando', 1, true) ~= nil)
 local mini_src = io.open('/workspace/Journal/mini_icon.lua'):read('*a')
 check('book has no tooltip', mini_src:find('BeginTooltip', 1, true) == nil and mini_src:find('SetTooltip', 1, true) == nil)
@@ -300,7 +300,8 @@ check('compass drag does not restamp', compass.GetWindowScaleEpoch() == epoch + 
 check('compass drag updates scale', math.abs(compass.GetWindowScale() - 1.58) < 0.001)
 compass.Load(compass_snap)
 local journal_src = io.open('/workspace/Journal/journal.lua'):read('*a')
-check('addon version 0.3.4', journal_src:find("addon.version = '0.3.4'", 1, true) ~= nil)
+check('addon version 0.3.7', journal_src:find("addon.version = '0.3.7'", 1, true) ~= nil)
+check('text scale does not resize windows', ui_src:find('scalex', 1, true) == nil)
 check('addon author kxteel', journal_src:find("addon.author  = 'Kxteel'", 1, true) ~= nil)
 local logic_src = io.open('/workspace/Journal/logic.lua'):read('*a')
 check('no new compass setting', logic_src:find('prox_compass_open', 1, true) == nil)
@@ -318,7 +319,7 @@ local function count_keys(path)
     end
     return n
 end
-check('translation keys 7692', count_keys('/workspace/Journal/data/translations_ja.lua') == 7692)
+check('translation keys kept and extended', count_keys('/workspace/Journal/data/translations_ja.lua') == 7765)
 check('ui keys', count_keys('/workspace/Journal/data/ui_ja.lua') > 0)
 check('tracker opens journal list', type(logic.OpenPinInJournal) == 'function')
 check('prox range', logic.prox_range.radius == 30 and logic.prox_range.keep == 35)
@@ -550,6 +551,34 @@ local event = dump.changes('c1', 'c2')
 check('dump event number', table.concat(event.lines, '\n'):find('0x05C 数値 2: 0 → 4', 1, true) ~= nil)
 dump.reset()
 check('dump off again', dump.is_enabled() == false)
+
+local rich = require('richtext')
+local item_styles = {
+    { kind = 'item', index = { { name = 'honey' }, { name = 'mythril sword' } } },
+}
+local function marked(text, have)
+    return rich.annotate(text, item_styles, function(name, quantity)
+        local owned = have[name] or 0
+        if owned >= quantity then
+            return 'ok', owned
+        end
+        return 'partial', owned
+    end)
+end
+check('ja count is not one of five', marked('Honey5個を用意。', { Honey = 1 }):find('(1/5)', 1, true) ~= nil)
+check('ja count check when enough', marked('Honey5個を用意。', { Honey = 5 }):find('VV', 1, true) ~= nil)
+check('ja trade is not a reward skip', marked('RaimbroyにHoney5個を渡し400ギルを受け取る。', { Honey = 5 }):find('VV', 1, true) ~= nil)
+check('reward receive stays unmarked', marked('receive the Mythril Sword.', { ['Mythril Sword'] = 1 }) == 'receive the Mythril Sword.')
+check('ja receive stays unmarked', marked('Mythril Swordを受け取る。', { ['Mythril Sword'] = 1 }) == 'Mythril Swordを受け取る。')
+
+check('fame 2 is not bastok for every quest', words['Fame 2'] == '名声2')
+check('bastok fame stays on that quest', words['quest:bsz_pb_guest_of_hauteur:req'] == 'バストゥーク名声3')
+check('sandoria fame level follows data', words['quest:sdz_ss_timely_visit:req'] == 'サンドリア名声4')
+check('norg fame is named', words['Fame 2 (Norg)'] == 'ノーグ名声2')
+check('porika step is translated', words['Return to Tosuka-Porika (G-8).'] == 'Tosuka-Porika(G-8)のもとへ戻る。')
+check('notes menu is japanese', require('data.ui_ja')['General notes'] == 'メモ')
+check('yes button remains', require('data.ui_ja')['Yes'] == 'はい')
+check('no thanks remains', require('data.ui_ja')['No thanks'] == 'いいえ')
 
 if fails > 0 then
     io.write('FAILED ', fails, '\n')

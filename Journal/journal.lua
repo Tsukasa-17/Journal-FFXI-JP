@@ -1,6 +1,6 @@
 addon.name    = 'Journal'
 addon.author  = 'Kxteel'
-addon.version = '0.3.4'
+addon.version = '0.3.7'
 addon.desc    = 'Journal for FFXI'
 
 --[[
@@ -64,6 +64,13 @@ local logic = require('logic')
 local pinned = require('pinned')
 local announce = require('announce')
 local worldmark = require('worldmark')
+
+-- The items that a step asks for are checked against the inventory.
+require('richtext').items_api = require('inventory')
+
+-- Research of the fame (reputation): /journal fame debug.
+require('fame')
+require('rank')
 
 --------------------------------- INITIALIZATION
 

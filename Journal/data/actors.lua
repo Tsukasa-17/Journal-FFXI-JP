@@ -30,6 +30,9 @@ local DEFINITIONS = {
     -- Common / Jeuno / nations
 
     { 'GATE_GUARD', 'Gate Guard.' },
+    { 'WINDURST_GATE_GUARD', 'any Gate Guard in Windurst: Mokyokyo (Windurst Waters F-5), Janshura-Rashura (Port Windurst B-5), Rakoh Buuma (Windurst Woods K-10) or Zokima-Rokima (Windurst Walls H-7).' },
+    { 'BASTOK_GATE_GUARD', 'any Gate Guard: Argus (Port Bastok L-7), Cleades (Bastok Markets D-11), Malduc (Metalworks J-8) or Rashid (Bastok Mines H-10).' },
+    { 'SANDORIA_GATE_GUARD', "any Gate Guard in San d'Oria: Ambrotien (Southern San d'Oria K-10), Endracion (Southern San d'Oria F-9) or Grilau (Northern San d'Oria D-8)." },
     { 'HALVER', "Halver (I-9)." },
     { 'KUPIPI', "Kupipi." },
     { 'SHANTOTTO', 'Shantotto (K-7).' },
@@ -147,7 +150,7 @@ local DEFINITIONS = {
     { 'LAA_MOZI', 'Laa Mozi (H-7).' },
     { 'UU_ZHOUMO', 'Uu Zhoumo (F-7).' },
     { 'GHOO_PAKYA', 'Ghoo Pakya (G-7).' },
-    { 'TOSUKA_PORUKA', 'Tosuka-Poruka (G-8).' },
+    { 'TOSUKA_PORUKA', 'Tosuka-Porika (G-8).' },
     { 'NANAA_MIHGO', "Nanaa Mihgo (J-3)." },
     { 'MORENO_TOENO', 'Moreno-Toeno (L-6).' },
     { 'PATT_POTT', 'Patt-Pott (I-7).' },

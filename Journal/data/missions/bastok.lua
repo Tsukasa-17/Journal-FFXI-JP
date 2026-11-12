@@ -124,7 +124,7 @@ M.STEPS = {
         mission_type = 'Quest',
         reward = "Rank Points",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.BASTOK_GATE_GUARD.text .. ".",
             "Enter Zeruhn Mines from Bastok Mines at (D-7).",
             "Speak with " .. ACTOR.MAKARIM.text .. " at (H-11) to receive the Zeruhn Report.",
             "Return to Bastok Metalworks and speak with " .. ACTOR.NAJI.text .. " at (J-8).",
@@ -138,7 +138,7 @@ M.STEPS = {
         mission_type = 'Quest',
         reward = "Rank Points",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.BASTOK_GATE_GUARD.text .. ".",
             "Travel to Cid's Lab at (G-8) in Metalworks and speak with " .. ACTOR.CID.text .. ".",
             "Receive the Blue acidity tester.",
             "Enter Dangruf Wadi from South Gustaberg at (D-9).",
@@ -155,9 +155,9 @@ M.STEPS = {
         mission_type = 'Repeatable',
         reward = "Rank 2, 1,000 gil",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.BASTOK_GATE_GUARD.text .. ".",
             "Travel to Palborough Mines and obtain a Fetich Head, Fetich Torso, Fetich Arms, and Fetich Legs from Quadavs.",
-            "Return to Bastok and trade all four Fetich pieces to " .. ACTOR.GATE_GUARD.text .. ".",
+            "Return to Bastok and trade all four Fetich pieces to " .. ACTOR.BASTOK_GATE_GUARD.text .. ".",
         },
     },
 
@@ -168,7 +168,7 @@ M.STEPS = {
         mission_type = 'Quest',
         reward = "Rank Points",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.BASTOK_GATE_GUARD.text .. ".",
             "Travel to Cid's Lab in Bastok Metalworks and speak with " .. ACTOR.CID.text .. ".",
             "Obtain a Faded Crystal and trade it to " .. ACTOR.CID.text .. ".",
             "Speak with " .. ACTOR.AYAME.text .. ".",
@@ -182,7 +182,7 @@ M.STEPS = {
         mission_type = 'Repeatable',
         reward = "Rank Points",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.BASTOK_GATE_GUARD.text .. ".",
             "Obtain a Lizard Egg.",
             "Travel to the President's Office in Bastok Metalworks and speak with " .. ACTOR.ALOIS.text .. " at (J-8).",
             "Trade the Lizard Egg to " .. ACTOR.ALOIS.text .. ".",
@@ -196,7 +196,7 @@ M.STEPS = {
         mission_type = 'BCNM',
         reward = "Rank 3, 3,000 gil, Adventurer's Certificate",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.BASTOK_GATE_GUARD.text .. ".",
             "Speak with " .. ACTOR.NAJI.text .. " to begin the embassy mission.",
             "Choose whether to visit San d'Oria or Windurst first.",
 
@@ -232,7 +232,7 @@ M.STEPS = {
         mission_type = 'Quest',
         reward = "Rank Points",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.BASTOK_GATE_GUARD.text .. ".",
             "Speak with " .. ACTOR.IRON_EATER.text .. ".",
             "Travel to Beadeaux and defeat 20 Copper Quadavs.",
             "Return to the required area of Pashhow Marshlands and complete the event.",
@@ -246,13 +246,13 @@ M.STEPS = {
         mission_type = 'Repeatable',
         reward = "Rank Points",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.BASTOK_GATE_GUARD.text .. ".",
             "Speak with " .. ACTOR.DAVYAD.text .. ".",
             "Obtain a Hare Meat.",
             "Travel to Gusgen Mines and reach (J-7).",
             "Trade the Hare Meat to the ???.",
             "Defeat Blind Moby and obtain the Glocolite.",
-            "Return to Bastok and speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Return to Bastok and speak with " .. ACTOR.BASTOK_GATE_GUARD.text .. ".",
         },
     },
 
@@ -263,7 +263,7 @@ M.STEPS = {
         mission_type = 'Fight',
         reward = "Rank 4, 5,000 gil",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.BASTOK_GATE_GUARD.text .. ".",
             "Speak with " .. ACTOR.LUCIUS.text .. ".",
             "Travel to Ru'Lude Gardens and speak with " .. ACTOR.GOGGEHN.text .. " at the Bastokan Embassy.",
             "Travel to Lower Delkfutt's Tower and enter the basement through the Cermet Door at (E-8).",
@@ -303,7 +303,7 @@ M.STEPS = {
         mission_type = 'BCNM',
         reward = "Rank Points",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.BASTOK_GATE_GUARD.text .. ".",
             "Speak with " .. ACTOR.NAJI.text .. ".",
             "Travel to Fei'Yin and complete the event.",
             "Travel to " .. ACTOR.QU_BIA_ARENA.text .. " and enter the battlefield.",
@@ -333,7 +333,7 @@ M.STEPS = {
         mission_type = 'Fight',
         reward = "Rank Points",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.BASTOK_GATE_GUARD.text .. ".",
             "Speak with " .. ACTOR.MEDICINE_EAGLE.text .. ".",
             "Speak with " .. ACTOR.DRAKE_FANG.text .. ".",
             "Travel to Western Altepa Desert and reach (G-8).",
@@ -351,7 +351,7 @@ M.STEPS = {
         mission_type = 'Fight',
         reward = "Rank 7, 40,000 gil",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.BASTOK_GATE_GUARD.text .. ".",
             "Speak with " .. ACTOR.NAJI.text .. ".",
             "Travel to Norg and speak with Gilgamesh.",
             "Obtain Adaman Ore.",
@@ -370,7 +370,7 @@ M.STEPS = {
         mission_type = 'Fight',
         reward = "Rank Points",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.BASTOK_GATE_GUARD.text .. ".",
             "Speak with " .. ACTOR.CID.text .. ".",
             "Travel to Ro'Maeve and search for the ??? at one of the following locations:",
             ACTOR.ROMAEVE_QQ_D10.text,
@@ -399,7 +399,7 @@ M.STEPS = {
         mission_type = 'BCNM',
         reward = "Rank 8, 60,000 gil",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.BASTOK_GATE_GUARD.text .. ".",
             "Speak with " .. ACTOR.KARST.text .. ".",
             "Speak with " .. ACTOR.HILDA.text .. ".",
             "Travel to " .. ACTOR.WAUGHROON_SHRINE.text .. " through Palborough Mines.",
@@ -416,7 +416,7 @@ M.STEPS = {
         mission_type = 'Fight',
         reward = "Rank Points",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.BASTOK_GATE_GUARD.text .. ".",
             "Speak with " .. ACTOR.IRON_EATER.text .. ".",
             "Enter Quicksand Caves from Western Altepa Desert at (G-5).",
             "Reach (H-8) and pass through the weighted door.",
@@ -439,7 +439,7 @@ M.STEPS = {
         mission_type = 'Fight',
         reward = "Rank 9, 80,000 gil",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.BASTOK_GATE_GUARD.text .. ".",
             "Speak with " .. ACTOR.DRAKE_FANG.text .. ".",
             "Travel to Kuftal Tunnel and descend to the lower level.",
             "Reach " .. ACTOR.KUFTAL_QQ.text .. " at (H-8).",
@@ -457,7 +457,7 @@ M.STEPS = {
         mission_type = 'Fight',
         reward = "Rank Points",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.BASTOK_GATE_GUARD.text .. ".",
             "Speak with " .. ACTOR.ALOIS.text .. ".",
             "Travel to Rabao and speak with Dancing Wolf at (G-7).",
             "Travel to Gustav Tunnel and reach the pond at (G-6).",
@@ -476,7 +476,7 @@ M.STEPS = {
         mission_type = 'BCNM',
         reward = "Rank 10, 100,000 gil, Bastokan Flag, Ability to buy Atma of the Hero",
         steps = {
-            "Speak with " .. ACTOR.GATE_GUARD.text .. ".",
+            "Speak with " .. ACTOR.BASTOK_GATE_GUARD.text .. ".",
             "Speak with " .. ACTOR.IRON_EATER.text .. ".",
             "Travel to Castle Zvahl Keep and proceed to the Throne Room.",
             "Enter the battlefield and defeat the required opponents.",

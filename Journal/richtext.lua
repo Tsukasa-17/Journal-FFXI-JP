@@ -110,9 +110,17 @@ function M.spans(text, index)
             local first = text:sub(map[s], map[s])
 
             local japanese = zone.japanese or zone.name:find('[\227-\233]') ~= nil
+            -- "Honey5個" glues the count to the English name. The digit is
+            -- still the end of the name, not part of it.
+            local after_ok = not is_word_char(after)
+
+            if not after_ok and after:match('%d') then
+                after_ok = haystack:sub(e + 1):find('^%d+%s*個') ~= nil
+            end
+
             if (japanese and ja_style.boundary(haystack, s, e))
                 or (not japanese and not is_word_char(before)
-                    and not is_word_char(after) and first:match('%u') ~= nil) then
+                    and after_ok and first:match('%u') ~= nil) then
 
                 found[#found + 1] = { s = s, e = e, length = e - s + 1 }
             end
@@ -443,6 +451,10 @@ M.COLORS = {
     npc = { 0.64, 0.75, 0.26, 1.0 },
     monster = { 1.00, 0.55, 0.55, 1.0 },
     item = { 0.96, 0.88, 0.52, 1.0 },
+    -- The green check mark after an item the player has, and the counter
+    -- (have/needed) while there are not enough.
+    tick = { 0.35, 0.85, 0.45, 1.0 },
+    count = { 0.62, 0.80, 0.66, 1.0 },
 }
 
 -- { r, g, b, a } as the packed 0xAABBGGRR number the draw list wants.
@@ -486,6 +498,262 @@ end
 
 function M.tint_italic(kind)
     return kind == 'italic' and M.fonts.italic == nil
+end
+
+-- Items the player has. M.items_api is set by journal.lua (inventory.lua):
+-- Tick(), Version() and Status(name, quantity). After the name of an item
+-- that the text asks for ("Honey x5") a green check mark is put when the
+-- player has enough of it, or a counter "(2/5)" when he has some. The
+-- check mark is a word of two letters ("VV") that is drawn as a V, so the
+-- text wraps around it as around any other word. An item that appears as
+-- a reward ("... and receive Mythril Sword") is skipped: the sentence
+-- before the name says receive or reward.
+-- English/Spanish words sit before the item. Japanese reward verbs sit
+-- immediately after it (「銀の鈴を受け取る」). Obtain wording (用意, 入手,
+-- 渡す) is not a reward: the step still asks the player to have the item.
+local REWARD_BEFORE = {
+    'receive', 'reward', 'earn', 'recib', 'recompensa',
+    '報酬', '受け取る', 'もらう',
+}
+
+local function is_reward(text, position, item_end)
+    local before = text:sub(1, position - 1)
+    local clause = before:match('.*[。．%.！!？?]%s*(.*)$') or before
+    local low = clause:lower()
+
+    for _, word in ipairs(REWARD_BEFORE) do
+        if clause:find(word, 1, true) or low:find(word, 1, true) then
+            return true
+        end
+    end
+
+    local tail = text:sub((item_end or position) + 1)
+    -- Only the verb of this item. A later 「を受け取る」 belongs to the reward.
+    if tail:find('^%s*を受け取る')
+        or tail:find('^%s*をもらう')
+        or tail:find('^%s*がもらえる')
+        or tail:find('^%s*を報酬')
+        or tail:find('^%s*が報酬') then
+        return true
+    end
+
+    return false
+end
+
+local function read_digit(text, index)
+    local ch = text:sub(index, index)
+
+    if ch:match('%d') then
+        return ch, 1
+    end
+
+    -- Fullwidth digits U+FF10..FF19 are EF BC 90..99.
+    if text:byte(index) == 0xEF
+        and text:byte(index + 1) == 0xBC then
+
+        local third = text:byte(index + 2)
+
+        if third ~= nil and third >= 0x90 and third <= 0x99 then
+            return string.char(third - 0x90 + 48), 3
+        end
+    end
+
+    return nil
+end
+
+local function is_count_mark(text, index)
+    local ch = text:sub(index, index)
+
+    if ch == 'x' or ch == 'X' then
+        return 1
+    end
+
+    -- × (U+00D7), ｘ (U+FF58), Ｘ (U+FF38).
+    if text:byte(index) == 0xC3 and text:byte(index + 1) == 0x97 then
+        return 2
+    end
+
+    if text:byte(index) == 0xEF and text:byte(index + 1) == 0xBD
+        and text:byte(index + 2) == 0x98 then
+        return 3
+    end
+
+    if text:byte(index) == 0xEF and text:byte(index + 1) == 0xBC
+        and text:byte(index + 2) == 0xB8 then
+        return 3
+    end
+
+    return nil
+end
+
+-- Quantity written on the item: "x5", "×5", or Japanese "5個" / "Honey5個".
+-- Returns quantity, end index (inclusive), or nil when no count is written.
+function M.quantity_after(text, position)
+    local i = position + 1
+    local n = #text
+
+    while i <= n and text:sub(i, i):match('%s') do
+        i = i + 1
+    end
+
+    local mark = is_count_mark(text, i)
+    local saw_mark = mark ~= nil
+
+    if mark ~= nil then
+        i = i + mark
+
+        while i <= n and text:sub(i, i):match('%s') do
+            i = i + 1
+        end
+    end
+
+    local digits = {}
+
+    while i <= n do
+        local digit, width = read_digit(text, i)
+
+        if digit == nil then
+            break
+        end
+
+        digits[#digits + 1] = digit
+        i = i + width
+
+        if text:sub(i, i) == ',' then
+            i = i + 1
+        elseif text:byte(i) == 0xEF and text:byte(i + 1) == 0xBC
+            and text:byte(i + 2) == 0x8C then
+            i = i + 3
+        end
+    end
+
+    if #digits == 0 then
+        return nil
+    end
+
+    local ko = text:sub(i):find('^%s*個')
+
+    if not saw_mark and ko == nil then
+        return nil
+    end
+
+    if ko ~= nil then
+        local _, ko_end = text:sub(i):find('^%s*個')
+        i = i + ko_end
+    end
+
+    return tonumber(table.concat(digits)) or 1, i - 1
+end
+
+-- Returns the text with the marks inserted and the forced ranges
+-- { s, e, kind = 'tick' | 'count' } that style them (nil without marks).
+function M.annotate(text, styles, status)
+    local inserts = {}
+
+    for _, mark in ipairs(M.marks(text, styles)) do
+        if mark.kind == 'item' then
+            local name = text:sub(mark.s, mark.e)
+            local at = mark.e
+            local quantity = 1
+            local counted, count_end = M.quantity_after(text, mark.e)
+
+            if counted ~= nil then
+                quantity = counted
+                at = count_end
+            end
+
+            if not is_reward(text, mark.s, at) then
+                local state, have = status(name, quantity)
+
+                if state == 'ok' then
+                    inserts[#inserts + 1] = { at = at, text = ' VV', kind = 'tick' }
+                elseif state == 'partial' and quantity > 1 and (have or 0) > 0 then
+                    inserts[#inserts + 1] = {
+                        at = at,
+                        text = ' (' .. tostring(have) .. '/' .. tostring(quantity) .. ')',
+                        kind = 'count',
+                    }
+                end
+            end
+        end
+    end
+
+    if #inserts == 0 then
+        return text, nil
+    end
+
+    table.sort(inserts, function(a, b)
+        return a.at < b.at
+    end)
+
+    local out = {}
+    local forced = {}
+    local shift = 0
+    local last = 0
+
+    for _, insert in ipairs(inserts) do
+        out[#out + 1] = text:sub(last + 1, insert.at)
+        out[#out + 1] = insert.text
+        forced[#forced + 1] = {
+            s = insert.at + shift + 2,
+            e = insert.at + shift + #insert.text,
+            kind = insert.kind,
+        }
+        shift = shift + #insert.text
+        last = insert.at
+    end
+
+    out[#out + 1] = text:sub(last + 1)
+
+    return table.concat(out), forced
+end
+
+local annotated_cache = { styles = nil, version = nil, map = {}, count = 0 }
+
+-- The annotated text of a step, kept until the inventory or the styles
+-- change.
+local function annotated(text, styles)
+    local api = M.items_api
+
+    if api == nil then
+        return text, nil
+    end
+
+    local ok, new_text, forced = pcall(function()
+        api.Tick()
+
+        local version = api.Version()
+
+        if annotated_cache.styles ~= styles
+            or annotated_cache.version ~= version
+            or annotated_cache.count > 400 then
+
+            annotated_cache = {
+                styles = styles,
+                version = version,
+                map = {},
+                count = 0,
+            }
+        end
+
+        local hit = annotated_cache.map[text]
+
+        if hit == nil then
+            local result, ranges = M.annotate(text, styles, api.Status)
+
+            hit = { result, ranges or false }
+            annotated_cache.map[text] = hit
+            annotated_cache.count = annotated_cache.count + 1
+        end
+
+        return hit[1], hit[2] or nil
+    end)
+
+    if not ok then
+        return text, nil
+    end
+
+    return new_text, forced
 end
 
 ---------------------------------------------------------------- drawing
@@ -545,6 +813,7 @@ local SHADOW_COLOR = 0xCC000000
 -- opts.on_npc        function(name) called when an NPC name is clicked
 -- opts.id            prefix of the ids of the clickable NPC names
 -- opts.npc_tooltip   tooltip of a clickable NPC name
+-- opts.items         true to mark the items the player has (steps only)
 -- Only the user's click invokes the supported ImGui clipboard API. Never
 -- read the clipboard, inject commands, or fall back to an OS/shell mechanism.
 local item_copy_feedback = {}
@@ -581,6 +850,15 @@ function M.draw_wrapped(text, opts)
 
     opts = opts or {}
     text = tostring(text or '')
+
+    -- shown is the text with the item marks; text stays the plain one for
+    -- the fallback below.
+    local shown = text
+    local forced = opts.forced
+
+    if opts.items == true and forced == nil then
+        shown, forced = annotated(text, opts.styles)
+    end
 
     local size = opts.size or 16
     local bold_all = opts.bold == true
@@ -634,7 +912,7 @@ function M.draw_wrapped(text, opts)
 
     local lines
     local ok = pcall(function()
-        local words = cached_words(text, opts.styles, opts.forced)
+        local words = cached_words(shown, opts.styles, forced)
 
         -- Right-aligned text and text with a shadow always need their own
         -- layout.
@@ -653,8 +931,9 @@ function M.draw_wrapped(text, opts)
         end
 
         -- Room on the right (a close button) stays out of the wrapped lines.
+        -- Key on the annotated text so item marks do not reuse a stale wrap.
         local usable = math.max(40, width - 6 - reserve)
-        local key = text .. '\0' .. math.floor(usable) .. '\0' .. size
+        local key = shown .. '\0' .. math.floor(usable) .. '\0' .. size
             .. (bold_all and '\0b' or '')
 
         lines = cache.lines[key]
@@ -730,24 +1009,46 @@ function M.draw_wrapped(text, opts)
                     -- Shadows first, so no shadow lands on a neighbour.
                     if shadow then
                         for _, piece in ipairs(pieces) do
-                            put(piece, SHADOW_OFFSET, SHADOW_OFFSET, SHADOW_COLOR)
+                            if piece.kind ~= 'tick' then
+                                put(piece, SHADOW_OFFSET, SHADOW_OFFSET, SHADOW_COLOR)
+                            end
                         end
                     end
+
+                    local _, rect_max_y = imgui.GetItemRectMax()
+                    local line_height = rect_max_y - min_y
 
                     for _, piece in ipairs(pieces) do
                         local color = col
 
-                        if M.tint_italic(piece.kind) then
+                        if piece.kind == 'tick' then
+                            -- The two letters only reserve the room: a green
+                            -- V is drawn in their place.
+                            local mark = line_height * 0.80
+
+                            require('icons').draw_check(
+                                draw,
+                                min_x + shift + piece.x
+                                    + (piece.width - mark) * 0.5,
+                                min_y + (line_height - mark) * 0.5,
+                                mark,
+                                palette.tick,
+                                1,
+                                math.max(1.6, mark * 0.16)
+                            )
+                        elseif M.tint_italic(piece.kind) then
                             color = tint
                         elseif palette[piece.kind] ~= nil then
                             color = palette[piece.kind]
                         end
 
-                        put(piece, 0, 0, color)
+                        if piece.kind ~= 'tick' then
+                            put(piece, 0, 0, color)
 
-                        if M.fake_bold(piece.kind)
-                            or (bold_all and M.fonts.bold == nil) then
-                            put(piece, BOLD_OFFSET, 0, color)
+                            if M.fake_bold(piece.kind)
+                                or (bold_all and M.fonts.bold == nil) then
+                                put(piece, BOLD_OFFSET, 0, color)
+                            end
                         end
                     end
 

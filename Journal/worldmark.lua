@@ -663,6 +663,8 @@ local ICON_FILES = {
     mission_completed = 'mission_completed.png',
     mission_locked = 'mission_locked.png',
     mission_available = 'mission_available.png',
+    mission_progress = 'mission_progress.png',
+    fame = 'fame.png',
 }
 
 local icons = {}
@@ -1016,7 +1018,11 @@ function M.Draw(controller, can_draw)
             info.drawn = info.drawn + 1
             -- A quest in progress: a circular arrow turning; the others: a
             -- down arrow.
-            local kind = target.locked and 'locked'
+            local kind = target.state == 'fame' and 'fame'
+                or ((target.state == 'mission_available'
+                    or target.state == 'mission_progress'
+                    or target.state == 'mission_locked') and target.state)
+                or target.locked and 'locked'
                 or (target.state == 'active' and 'progress'
                     or (target.state == 'repeatable' and 'repeatable'
                         or 'available'))

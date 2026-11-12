@@ -135,6 +135,52 @@ local function apply_text_scale()
     SETTINGS_BUTTON_HEIGHT = scaled(42)
 end
 
+-- Windows follow the size of the text. Each window remembers its size and
+-- the text scale it had; when the scale changes, the window grows or shrinks
+-- by the same factor. before() goes just ahead of Begin, after() inside it.
+-- The Fame window and the icon of the Fame Checker NPCs. A table, to keep the
+-- locals of this file under the limit.
+local fame_ui = { was_open = false, restore = false }
+
+-- Draws the Fame Checker icon at the cursor, as tall as a line of text, and
+-- leaves the cursor ready for SameLine. Returns the width it took (0 when
+-- there is no icon, and then nothing was drawn).
+function fame_ui.inline_icon(kind)
+    local icon = controller
+        and controller.worldmark
+        and controller.worldmark.GetIcon
+        and controller.worldmark.GetIcon(kind or 'fame')
+
+    if icon == nil or not imgui.Dummy or not imgui.SameLine then
+        return 0
+    end
+
+    local icon_height = imgui.GetTextLineHeight()
+    local icon_width = icon_height * icon.width / icon.height
+
+    if not pcall(imgui.Dummy, { icon_width, icon_height }) then
+        return 0
+    end
+
+    pcall(function()
+        local min_x, min_y = imgui.GetItemRectMin()
+        local max_x, max_y = imgui.GetItemRectMax()
+
+        imgui.GetWindowDrawList():AddImage(
+            icon.id,
+            { min_x, min_y },
+            { max_x, max_y },
+            { 0, 0 },
+            { 1, 1 },
+            imgui.GetColorU32({ 1, 1, 1, 1 })
+        )
+    end)
+
+    imgui.SameLine(0, 4)
+
+    return icon_width + 4
+end
+
 local journal_restore_window = true
 local journal_last_reset_count = nil
 local journal_mini_restore_window = true
@@ -186,6 +232,15 @@ end
 -- Sheet opened without the Journal, and the size the player last gave it.
 local sheetx = { standalone = false, w = nil, h = nil, kinds = {}, kinds_time = -1000 }
 
+-- The window of the general notes (notes.lua keeps the list): the box that
+-- is being edited, the delete that waits for a second click, and the width
+-- of the button in the toolbar.
+local notesx = {
+    buffer = { '' }, tbuf = { '' }, cbuf = { '' },
+    key = nil, ckey = nil, confirm = nil,
+    was_open = false, btn_w = 0, full = 0,
+}
+
 sheetx.row_icon = function(row, status, mission)
     if controller == nil or controller.worldmark == nil
         or controller.worldmark.GetIcon == nil then
@@ -210,7 +265,14 @@ sheetx.row_icon = function(row, status, mission)
             return marks.GetIcon('mission_locked')
         end
 
-        if status == 'active' or status == 'not_started' then
+        -- In progress: its own icon (available when that file is missing).
+        -- Not started and available: the available icon.
+        if status == 'active' then
+            return marks.GetIcon('mission_progress')
+                or marks.GetIcon('mission_available')
+        end
+
+        if status == 'not_started' then
             return marks.GetIcon('mission_available')
         end
 
@@ -366,6 +428,18 @@ local colors = {
     button = { 0.098, 0.109, 0.200, 1.00 },
     button_hover = { 0.128, 0.140, 0.247, 1.00 },
     button_active = { 0.149, 0.162, 0.272, 1.00 },
+    -- The Settings button: gray with a bright border.
+    settings_fill = { 0.400, 0.412, 0.447, 1.00 },
+    settings_hover = { 0.490, 0.502, 0.537, 1.00 },
+    settings_active = { 0.318, 0.329, 0.361, 1.00 },
+    settings_border = { 0.780, 0.792, 0.827, 1.00 },
+    settings_text = { 0.961, 0.965, 0.976, 1.00 },
+    -- The Missions and Quests buttons: the blue of the missions and the
+    -- yellow of the quests (the ones of the alerts).
+    mode_mission = { 0.55, 0.75, 1.00, 1.00 },
+    mode_quest = { 1.00, 0.85, 0.40, 1.00 },
+    -- The pulsing border of the Active Now button.
+    active_border = { 0.30, 0.90, 0.40, 1.00 },
     active_status = { 0.490, 0.698, 0.918, 1.00 },
     completed = { 0.498, 0.749, 0.541, 1.00 },
     not_started = { 0.588, 0.639, 0.710, 1.00 },
@@ -2043,6 +2117,7 @@ local function draw_steps(
                         styles = styles,
                         color = done and colors.text_dim or colors.text,
                         size = step_font_size,
+                        items = true,
                         on_npc = npc_click(text),
                         id = tostring(child_id) .. '_' .. i,
                         npc_tooltip = tx('Click to point the compass at it'),
@@ -2064,6 +2139,7 @@ local function draw_steps(
                         styles = styles,
                         color = colors.text,
                         size = step_font_size,
+                        items = true,
                         on_npc = npc_click(text),
                         id = tostring(child_id) .. '_' .. i,
                         npc_tooltip = tx('Click to point the compass at it'),
@@ -3132,31 +3208,33 @@ end
 local function toolbar_mode_button(
     label,
     active,
-    width
+    width,
+    tint
 )
-    imgui.PushStyleColor(
-        ImGuiCol_Button,
-        active
-            and colors.button_active
-            or transparent
-    )
+    -- With a tint the button has its own color: solid when it is the
+    -- active one, a dark shade of it (and tinted text) when it is not.
+    local fill, hover, pressed, text
 
-    imgui.PushStyleColor(
-        ImGuiCol_ButtonHovered,
-        colors.button_hover
-    )
+    if tint ~= nil then
+        local function shade(amount)
+            return { tint[1] * amount, tint[2] * amount, tint[3] * amount, 1 }
+        end
 
-    imgui.PushStyleColor(
-        ImGuiCol_ButtonActive,
-        colors.button_active
-    )
+        fill = active and tint or shade(0.30)
+        hover = active and lighten(tint, 0.08) or shade(0.42)
+        pressed = active and shade(0.85) or shade(0.50)
+        text = active and { 0.08, 0.09, 0.13, 1.00 } or tint
+    else
+        fill = active and colors.button_active or transparent
+        hover = colors.button_hover
+        pressed = colors.button_active
+        text = active and colors.text or colors.text_dim
+    end
 
-    imgui.PushStyleColor(
-        ImGuiCol_Text,
-        active
-            and colors.text
-            or colors.text_dim
-    )
+    imgui.PushStyleColor(ImGuiCol_Button, fill)
+    imgui.PushStyleColor(ImGuiCol_ButtonHovered, hover)
+    imgui.PushStyleColor(ImGuiCol_ButtonActive, pressed)
+    imgui.PushStyleColor(ImGuiCol_Text, text)
 
     local clicked =
         imgui.Button(
@@ -3228,7 +3306,8 @@ local function draw_journal_toolbar(
         if toolbar_mode_button(
             tx('Missions##JournalModeMissions'),
             is_mission_mode,
-            missions_width
+            missions_width,
+            colors.mode_mission
         ) and not is_mission_mode then
             controller.SetJournalMode(1)
         end
@@ -3238,7 +3317,8 @@ local function draw_journal_toolbar(
         if toolbar_mode_button(
             tx('Quests##JournalModeQuests'),
             not is_mission_mode,
-            quests_width
+            quests_width,
+            colors.mode_quest
         ) and is_mission_mode then
             controller.SetJournalMode(2)
         end
@@ -3367,20 +3447,8 @@ local function draw_journal_toolbar(
         local settings_width = 0
 
         if controller.ToggleSettings then
-            imgui.SameLine(0, 8)
-
             settings_width =
                 imgui.CalcTextSize(tx('Settings')) + 28
-
-            if imgui.Button(
-                tx('Settings') .. '##JournalSettingsButton',
-                {
-                    settings_width,
-                    ui_button_height,
-                }
-            ) then
-                controller.ToggleSettings()
-            end
         end
 
         -- Opens the Active Now window: the active quests and missions, and
@@ -3413,6 +3481,28 @@ local function draw_journal_toolbar(
                 imgui.PopStyleColor()
             end
 
+            -- Green border that pulses: brighter and thicker while the
+            -- window is open.
+            local pulse =
+                (math.sin(os.clock() * 3.0) + 1.0) * 0.5
+
+            local an_min_x, an_min_y = imgui.GetItemRectMin()
+            local an_max_x, an_max_y = imgui.GetItemRectMax()
+
+            imgui.GetWindowDrawList():AddRect(
+                { an_min_x, an_min_y },
+                { an_max_x, an_max_y },
+                imgui.GetColorU32({
+                    colors.active_border[1],
+                    colors.active_border[2],
+                    colors.active_border[3],
+                    (window_open and 0.70 or 0.40) + 0.30 * pulse,
+                }),
+                2,
+                0,
+                window_open and 2.5 or (1.5 + pulse)
+            )
+
             if imgui.IsItemHovered() and imgui.SetTooltip then
                 imgui.SetTooltip(
                     tx('Active quests and missions, and your favorites')
@@ -3420,96 +3510,49 @@ local function draw_journal_toolbar(
             end
         end
 
-        -- Opens the guide for new adventurers: a button with a green sprout.
-        local guide_width = 0
+        -- The menu groups the guide, the camps and the functions to come.
+        -- Its button sits at the right corner, left of Settings.
+        local menu_entries = {}
 
         if controller.ToggleGuide then
-            imgui.SameLine(0, 8)
-
-            guide_width = ui_button_height
-
-            local guide_open = controller.GetGuideOpen()
-
-            if guide_open then
-                imgui.PushStyleColor(
-                    ImGuiCol_Button,
-                    colors.button_active
-                )
-            end
-
-            if imgui.Button(
-                '##JournalGuideButton',
-                { guide_width, ui_button_height }
-            ) then
-                controller.ToggleGuide()
-            end
-
-            if guide_open then
-                imgui.PopStyleColor()
-            end
-
-            local min_x, min_y = imgui.GetItemRectMin()
-            local max_x, max_y = imgui.GetItemRectMax()
-            local size = (max_y - min_y) * 0.62
-
-            icons.draw_sprout(
-                imgui.GetWindowDrawList(),
-                min_x + ((max_x - min_x) - size) * 0.5,
-                min_y + ((max_y - min_y) - size) * 0.5,
-                size,
-                imgui.GetColorU32(colors.leaf),
-                imgui.GetColorU32(colors.leaf_2),
-                imgui.GetColorU32(colors.stem)
-            )
-
-            if imgui.IsItemHovered() and imgui.SetTooltip then
-                imgui.SetTooltip(tx('New adventurer guide'))
-            end
+            menu_entries[#menu_entries + 1] = {
+                id = 'Guide',
+                label = tx('New adventurer guide'),
+                icon = 'sprout',
+                open = controller.GetGuideOpen
+                    and controller.GetGuideOpen() or false,
+                toggle = controller.ToggleGuide,
+            }
         end
 
-        -- Opens the camps: a button with a red question mark.
-        local camps_width = 0
-
         if controller.ToggleCamps then
-            imgui.SameLine(0, 8)
+            menu_entries[#menu_entries + 1] = {
+                id = 'Camps',
+                label = tx('Camps'),
+                tip = tx('Camps: where to gain experience'),
+                icon = 'question',
+                open = controller.GetCampsOpen
+                    and controller.GetCampsOpen() or false,
+                toggle = controller.ToggleCamps,
+            }
+        end
 
-            camps_width = ui_button_height
+        if controller.ToggleFame then
+            menu_entries[#menu_entries + 1] = {
+                id = 'Fame',
+                label = tx('Fame'),
+                tip = tx('Fame of the nations'),
+                icon = 'star',
+                open = controller.GetFameOpen
+                    and controller.GetFameOpen() or false,
+                toggle = controller.ToggleFame,
+            }
+        end
 
-            local camps_open = controller.GetCampsOpen()
+        local menu_width = 0
 
-            if camps_open then
-                imgui.PushStyleColor(
-                    ImGuiCol_Button,
-                    colors.button_active
-                )
-            end
-
-            if imgui.Button(
-                '##JournalCampsButton',
-                { camps_width, ui_button_height }
-            ) then
-                controller.ToggleCamps()
-            end
-
-            if camps_open then
-                imgui.PopStyleColor()
-            end
-
-            local min_x, min_y = imgui.GetItemRectMin()
-            local max_x, max_y = imgui.GetItemRectMax()
-            local size = (max_y - min_y) * 0.66
-
-            icons.draw_question(
-                imgui.GetWindowDrawList(),
-                min_x + ((max_x - min_x) - size) * 0.5,
-                min_y + ((max_y - min_y) - size) * 0.5,
-                size,
-                imgui.GetColorU32(colors.camps_red)
-            )
-
-            if imgui.IsItemHovered() and imgui.SetTooltip then
-                imgui.SetTooltip(tx('Camps: where to gain experience'))
-            end
+        if #menu_entries > 0 then
+            menu_width = ui_button_height + 8
         end
 
         -- Shows or hides the compass window: a button with a compass.
@@ -3559,6 +3602,53 @@ local function draw_journal_toolbar(
             end
         end
 
+        -- Opens the general notes: a button with a sticky note.
+        notesx.btn_w = 0
+
+        if controller.notes ~= nil then
+            imgui.SameLine(0, 8)
+
+            notesx.btn_w = ui_button_height
+
+            local notes_open = controller.notes.GetOpen()
+
+            if notes_open then
+                imgui.PushStyleColor(
+                    ImGuiCol_Button,
+                    colors.button_active
+                )
+            end
+
+            if imgui.Button(
+                '##JournalNotesButton',
+                { notesx.btn_w, ui_button_height }
+            ) then
+                controller.notes.Toggle()
+            end
+
+            if notes_open then
+                imgui.PopStyleColor()
+            end
+
+            local min_x, min_y = imgui.GetItemRectMin()
+            local max_x, max_y = imgui.GetItemRectMax()
+            local size = (max_y - min_y) * 0.62
+
+            icons.draw_postit(
+                imgui.GetWindowDrawList(),
+                min_x + ((max_x - min_x) - size) * 0.5,
+                min_y + ((max_y - min_y) - size) * 0.5,
+                size,
+                imgui.GetColorU32({ 1.0, 0.86, 0.35, 1.0 }),
+                imgui.GetColorU32({ 0.80, 0.62, 0.15, 1.0 }),
+                imgui.GetColorU32({ 0.45, 0.33, 0.08, 1.0 })
+            )
+
+            if imgui.IsItemHovered() and imgui.SetTooltip then
+                imgui.SetTooltip(tx('General notes'))
+            end
+        end
+
         -- Search box: filters the list by name.
         if controller.SetSearchText then
             imgui.SameLine(0, 24)
@@ -3574,9 +3664,9 @@ local function draw_journal_toolbar(
                             - area_width
                             - settings_width
                             - active_width
-                            - guide_width
-                            - camps_width
+                            - menu_width
                             - compass_width
+                            - notesx.btn_w
                             - 190
                     )
                 )
@@ -3651,6 +3741,221 @@ local function draw_journal_toolbar(
                     controller.SetSearchText('')
                 end
             end
+        end
+
+        -- The menu button (three lines) and its list, then the settings
+        -- window button: gray, both at the right corner of the
+        -- bar, next to the search box.
+        if controller.ToggleSettings or #menu_entries > 0 then
+            local target_x =
+                imgui.GetWindowWidth() - settings_width - menu_width - 14
+
+            if imgui.GetCursorPosX then
+                target_x =
+                    math.max(target_x, imgui.GetCursorPosX() + 8)
+            end
+
+            imgui.SameLine(target_x, 0)
+        end
+
+        if #menu_entries > 0 then
+            if imgui.Button(
+                '##JournalMenuButton',
+                { ui_button_height, ui_button_height }
+            ) then
+                imgui.OpenPopup('##JournalMenuPopup')
+            end
+
+            local mb_min_x, mb_min_y = imgui.GetItemRectMin()
+            local mb_max_x, mb_max_y = imgui.GetItemRectMax()
+            local mb_w = mb_max_x - mb_min_x
+            local mb_h = mb_max_y - mb_min_y
+            local mb_draw = imgui.GetWindowDrawList()
+
+            for line = -1, 1 do
+                local line_y = mb_min_y + mb_h * 0.5 + line * mb_h * 0.18
+
+                mb_draw:AddLine(
+                    { mb_min_x + mb_w * 0.28, line_y },
+                    { mb_max_x - mb_w * 0.28, line_y },
+                    imgui.GetColorU32(colors.text),
+                    2
+                )
+            end
+
+            if imgui.IsItemHovered() and imgui.SetTooltip then
+                imgui.SetTooltip(tx('Menu'))
+            end
+
+            if settings_width > 0 then
+                imgui.SameLine(0, 8)
+            end
+        end
+
+        if controller.ToggleSettings then
+            imgui.PushStyleColor(
+                ImGuiCol_Button,
+                colors.settings_fill
+            )
+
+            imgui.PushStyleColor(
+                ImGuiCol_ButtonHovered,
+                colors.settings_hover
+            )
+
+            imgui.PushStyleColor(
+                ImGuiCol_ButtonActive,
+                colors.settings_active
+            )
+
+            imgui.PushStyleColor(
+                ImGuiCol_Text,
+                colors.settings_text
+            )
+
+            local settings_clicked =
+                imgui.Button(
+                    tx('Settings') .. '##JournalSettingsButton',
+                    {
+                        settings_width,
+                        ui_button_height,
+                    }
+                )
+
+            imgui.PopStyleColor(4)
+
+            -- Bright border drawn over the button.
+            local sb_min_x, sb_min_y = imgui.GetItemRectMin()
+            local sb_max_x, sb_max_y = imgui.GetItemRectMax()
+
+            imgui.GetWindowDrawList():AddRect(
+                { sb_min_x, sb_min_y },
+                { sb_max_x, sb_max_y },
+                imgui.GetColorU32(colors.settings_border),
+                2,
+                0,
+                2
+            )
+
+            if settings_clicked then
+                controller.ToggleSettings()
+            end
+        end
+
+        -- The list of the menu: one row for each function (its icon and its
+        -- name). The one whose window is open is shown pressed.
+        if #menu_entries > 0 and imgui.BeginPopup('##JournalMenuPopup') then
+            local row_icon = ui_button_height * 0.62
+            local row_width = 0
+
+            for _, entry in ipairs(menu_entries) do
+                row_width = math.max(
+                    row_width,
+                    (imgui.CalcTextSize(entry.label))
+                )
+            end
+
+            row_width = row_width + (row_icon + 24) * 2
+
+            for _, entry in ipairs(menu_entries) do
+                if entry.open then
+                    imgui.PushStyleColor(
+                        ImGuiCol_Button,
+                        colors.button_active
+                    )
+                end
+
+                local row_clicked = imgui.Button(
+                    entry.label .. '##JournalMenu' .. entry.id,
+                    { row_width, ui_button_height }
+                )
+
+                if entry.open then
+                    imgui.PopStyleColor()
+                end
+
+                local r_min_x, r_min_y = imgui.GetItemRectMin()
+                local r_max_x, r_max_y = imgui.GetItemRectMax()
+                local r_draw = imgui.GetWindowDrawList()
+                local r_x = r_min_x + 12
+                local r_y = r_min_y + ((r_max_y - r_min_y) - row_icon) * 0.5
+
+                if entry.icon == 'sprout' then
+                    icons.draw_sprout(
+                        r_draw, r_x, r_y, row_icon,
+                        imgui.GetColorU32(colors.leaf),
+                        imgui.GetColorU32(colors.leaf_2),
+                        imgui.GetColorU32(colors.stem)
+                    )
+                elseif entry.icon == 'question' then
+                    icons.draw_question(
+                        r_draw, r_x, r_y, row_icon,
+                        imgui.GetColorU32(colors.camps_red)
+                    )
+                elseif entry.icon == 'star' then
+                    -- The icon of the Fame Checkers; the star drawn with
+                    -- lines when there is no image.
+                    local fame_icon = controller.worldmark
+                        and controller.worldmark.GetIcon
+                        and controller.worldmark.GetIcon('fame')
+                    local image_drawn = false
+
+                    if fame_icon ~= nil then
+                        image_drawn = pcall(function()
+                            r_draw:AddImage(
+                                fame_icon.id,
+                                { r_x, r_y },
+                                {
+                                    r_x + row_icon * fame_icon.width
+                                        / fame_icon.height,
+                                    r_y + row_icon,
+                                },
+                                { 0, 0 },
+                                { 1, 1 },
+                                imgui.GetColorU32({ 1, 1, 1, 1 })
+                            )
+                        end)
+                    end
+
+                    -- Five-point star, drawn with lines.
+                    local cx = r_x + row_icon * 0.5
+                    local cy = r_y + row_icon * 0.53
+                    local rad = row_icon * 0.5
+                    local star_color = imgui.GetColorU32(colors.favorite)
+                    local points = {}
+
+                    for k = 0, 4 do
+                        local ang = -math.pi / 2 + k * (2 * math.pi / 5)
+                        points[k] = {
+                            cx + math.cos(ang) * rad,
+                            cy + math.sin(ang) * rad,
+                        }
+                    end
+
+                    for k = 0, image_drawn and -1 or 4 do
+                        local p1 = points[k]
+                        local p2 = points[(k + 2) % 5]
+
+                        r_draw:AddLine(
+                            { p1[1], p1[2] }, { p2[1], p2[2] },
+                            star_color, math.max(1.5, row_icon * 0.09)
+                        )
+                    end
+                end
+
+                if entry.tip and imgui.IsItemHovered()
+                    and imgui.SetTooltip then
+
+                    imgui.SetTooltip(entry.tip)
+                end
+
+                if row_clicked then
+                    entry.toggle()
+                    imgui.CloseCurrentPopup()
+                end
+            end
+
+            imgui.EndPopup()
         end
 
         local popup_id =
@@ -3949,6 +4254,7 @@ local function draw_sheet_step(index, text, state)
             styles = get_styles(),
             color = color,
             size = step_font_size,
+            items = true,
             on_npc = npc_click(text),
             id = 'sheet' .. tostring(index),
             npc_tooltip = tx('Click to point the compass at it'),
@@ -4006,10 +4312,11 @@ local function draw_sheet_window()
         imgui.SetNextWindowPos({ pos_x, pos_y })
     end
 
+    -- Fixed pixel limits: text size must not push a size the player set.
     if imgui.SetNextWindowSizeConstraints then
         imgui.SetNextWindowSizeConstraints(
-            { scaled(300), scaled(200) },
-            { scaled(1400), scaled(1400) }
+            { 300, 200 },
+            { 1400, 1400 }
         )
     end
 
@@ -4033,6 +4340,11 @@ local function draw_sheet_window()
     end
 
     local open = { true }
+
+    -- The grip of the corner, visible. Size is sheetx, not the text scale.
+    imgui.PushStyleColor(ImGuiCol_ResizeGrip, { 0.80, 0.84, 0.95, 0.30 })
+    imgui.PushStyleColor(ImGuiCol_ResizeGripHovered, { 0.80, 0.84, 0.95, 0.60 })
+    imgui.PushStyleColor(ImGuiCol_ResizeGripActive, { 0.80, 0.84, 0.95, 0.90 })
 
     if imgui.Begin(
         (
@@ -4223,6 +4535,7 @@ local function draw_sheet_window()
     end
 
     imgui.End()
+    imgui.PopStyleColor(3)
 
     if not open[1] then
         sheet_open = false
@@ -4441,12 +4754,14 @@ local function draw_progress_window()
 
     local open = { true }
 
+
     if imgui.Begin(
         tx('Progress') .. '###JournalProgress',
         open,
         ImGuiWindowFlags_NoSavedSettings
             + ImGuiWindowFlags_NoCollapse
     ) then
+
         local draw = imgui.GetWindowDrawList()
         local x, y = imgui.GetWindowPos()
         local width, height = imgui.GetWindowSize()
@@ -4843,12 +5158,14 @@ local function draw_active_window()
 
     local open = { true }
 
+
     if imgui.Begin(
         tx('Active Now') .. '###JournalActive',
         open,
         ImGuiWindowFlags_NoSavedSettings
             + ImGuiWindowFlags_NoCollapse
     ) then
+
         local draw = imgui.GetWindowDrawList()
         local x, y = imgui.GetWindowPos()
         local width, height = imgui.GetWindowSize()
@@ -5302,8 +5619,8 @@ do
         -- window is not pushed in or out by the new text.
         if imgui.SetNextWindowSizeConstraints then
             imgui.SetNextWindowSizeConstraints(
-                { scaled(190), scaled(80) },
-                { scaled(1000), scaled(1000) }
+                { 190, 80 },
+                { 1000, 1000 }
             )
         end
 
@@ -5659,9 +5976,28 @@ do
                     local top_y = cursor_y()
                     local cross = cscaled(14)
 
+                    -- The Fame Checkers have their own icon before the name.
+                    local name_icon = 0
+
+                    if controller.IsFameChecker
+                        and controller.IsFameChecker(row.name) then
+
+                        name_icon = fame_ui.inline_icon()
+                    elseif controller.GetMissionGiverIcon then
+                        -- A Gate Guard: the mission available or not.
+                        local giver_icon = controller.GetMissionGiverIcon(row.name)
+
+                        if giver_icon ~= nil then
+                            name_icon = fame_ui.inline_icon(giver_icon)
+                        end
+                    end
+
                     shadow_text(
                         richtext.COLORS.npc,
-                        i18n.step(row.name, row.id),
+                        fit_text(
+                            i18n.step(row.name, row.id),
+                            available - cscaled(24) - name_icon
+                        ),
                         cross + cscaled(16)
                     )
 
@@ -6291,12 +6627,14 @@ local function draw_settings_window()
 
     local open = { true }
 
+
     if imgui.Begin(
         tx('Settings') .. '###JournalSettings',
         open,
         ImGuiWindowFlags_NoSavedSettings
             + ImGuiWindowFlags_NoCollapse
     ) then
+
         local draw = imgui.GetWindowDrawList()
         local x, y = imgui.GetWindowPos()
         local width, height = imgui.GetWindowSize()
@@ -7081,12 +7419,14 @@ local function draw_guide_window()
 
     local open = { true }
 
+
     if imgui.Begin(
         tx('New adventurer guide') .. '###JournalGuide',
         open,
         ImGuiWindowFlags_NoSavedSettings
             + ImGuiWindowFlags_NoCollapse
     ) then
+
         local draw = imgui.GetWindowDrawList()
         local x, y = imgui.GetWindowPos()
         local width, height = imgui.GetWindowSize()
@@ -7343,12 +7683,14 @@ local function draw_camps_window()
 
     local open = { true }
 
+
     if imgui.Begin(
         tx('Camps') .. '###JournalCamps',
         open,
         ImGuiWindowFlags_NoSavedSettings
             + ImGuiWindowFlags_NoCollapse
     ) then
+
         local draw = imgui.GetWindowDrawList()
         local x, y = imgui.GetWindowPos()
         local width, height = imgui.GetWindowSize()
@@ -7459,6 +7801,187 @@ local function draw_camps_window()
 
     if not open[1] then
         controller.SetCampsOpen(false)
+    end
+
+    if font_pushed then
+        imgui.PopFont()
+    end
+
+    pop_theme()
+end
+
+-- Fame of the nations, as it was when the player last talked to the Fame
+-- Checker NPC of each one (see fame.lua).
+function fame_ui.draw()
+    local wanted =
+        controller
+        and controller.GetFameOpen
+        and controller.GetFameOpen()
+
+    if not wanted or not can_draw_ui() then
+        fame_ui.was_open = false
+
+        return
+    end
+
+    if not controller.GetFameLevels or not controller.GetFameAreas then
+        controller.SetFameOpen(false)
+
+        return
+    end
+
+    if not fame_ui.was_open then
+        fame_ui.was_open = true
+        fame_ui.restore = true
+    end
+
+    if fame_ui.restore then
+        fame_ui.restore = false
+
+        local journal =
+            controller.GetJournalWindowState
+            and controller.GetJournalWindowState()
+
+        local saved_w, saved_h
+
+        if controller.GetFameSize then
+            saved_w, saved_h = controller.GetFameSize()
+        end
+
+        imgui.SetNextWindowSize({
+            saved_w or scaled(520),
+            saved_h or scaled(430),
+        })
+
+        imgui.SetNextWindowPos({
+            ((journal and journal.visible and journal.x) or 40) + 80,
+            ((journal and journal.visible and journal.y) or 40) + 80,
+        })
+    end
+
+    push_theme()
+
+    local font_pushed = journal_font ~= nil
+
+    if font_pushed then
+        imgui.PushFont(journal_font, journal_font_size)
+    end
+
+    local open = { true }
+
+
+    if imgui.Begin(
+        tx('Fame') .. '###JournalFame',
+        open,
+        ImGuiWindowFlags_NoSavedSettings
+            + ImGuiWindowFlags_NoCollapse
+    ) then
+
+        local draw = imgui.GetWindowDrawList()
+        local x, y = imgui.GetWindowPos()
+        local width, height = imgui.GetWindowSize()
+
+        draw_window_panel(draw, x, y, width, height, true)
+
+        -- Remember the size the player gives the window.
+        if controller.SetFameSize and controller.GetFameSize then
+            local kept_w, kept_h = controller.GetFameSize()
+
+            kept_w = kept_w or scaled(520)
+            kept_h = kept_h or scaled(430)
+
+            if math.abs(width - kept_w) > 2
+                or math.abs(height - kept_h) > 2 then
+
+                controller.SetFameSize(width, height)
+            end
+        end
+
+        local fame = controller.GetFameLevels()
+
+        local first_area = true
+
+        for _, area in ipairs(controller.GetFameAreas()) do
+            local entry = fame[area.key]
+
+            -- A line between the nations.
+            if not first_area then
+                imgui.Spacing()
+                imgui.Separator()
+                imgui.Spacing()
+            end
+
+            first_area = false
+
+            imgui.TextColored(colors.gold, tx(area.name))
+            imgui.SameLine()
+
+            if entry then
+                imgui.TextColored(
+                    colors.favorite,
+                    string.format(tx('Level %d'), entry.level)
+                )
+            else
+                imgui.TextColored(colors.text_dim, tx('Unknown'))
+            end
+
+            if entry and entry.time and entry.time > 0 then
+                imgui.TextColored(
+                    colors.text_dim,
+                    string.format(
+                        tx('Last read: %s.'),
+                        os.date('%Y-%m-%d', entry.time)
+                    )
+                )
+            end
+
+            imgui.TextColored(colors.text_dim, tx('Talk to:'))
+
+            -- The Fame Checkers: each name is clickable and points the
+            -- compass at the NPC, as in the steps of the quests.
+            for _, checker in ipairs(area.checkers) do
+                fame_ui.inline_icon()
+                imgui.TextColored(richtext.COLORS.npc, checker.npc)
+
+                if imgui.IsItemHovered() then
+                    pcall(function()
+                        local min_x, min_y = imgui.GetItemRectMin()
+                        local max_x, max_y = imgui.GetItemRectMax()
+
+                        imgui.GetWindowDrawList():AddLine(
+                            { min_x, max_y },
+                            { max_x, max_y },
+                            imgui.GetColorU32(richtext.COLORS.npc),
+                            1
+                        )
+                    end)
+
+                    if imgui.SetTooltip then
+                        imgui.SetTooltip(
+                            tx('Click to point the compass at it')
+                        )
+                    end
+
+                    if imgui.IsItemClicked()
+                        and controller.AddCompassNpcByName then
+
+                        controller.AddCompassNpcByName(
+                            checker.npc,
+                            checker.place
+                        )
+                    end
+                end
+
+                imgui.SameLine()
+                imgui.TextColored(colors.text_dim, tx(checker.place))
+            end
+        end
+    end
+
+    imgui.End()
+
+    if not open[1] then
+        controller.SetFameOpen(false)
     end
 
     if font_pushed then
@@ -7693,6 +8216,7 @@ local function draw_journal()
         and tx('Mission Journal')
         or tx('Quest Journal')
 
+
     if imgui.Begin(
         title .. '###JournalWindow',
         open,
@@ -7701,6 +8225,7 @@ local function draw_journal()
             + ImGuiWindowFlags_NoScrollWithMouse
             + ImGuiWindowFlags_NoCollapse
     ) then
+
         local draw =
             imgui.GetWindowDrawList()
 
@@ -8026,10 +8551,15 @@ local function controller_cancel()
         or (controller.GetActiveOpen and controller.GetActiveOpen())
         or (controller.GetSettingsOpen and controller.GetSettingsOpen())
         or (controller.GetGuideOpen and controller.GetGuideOpen())
-        or (controller.GetCampsOpen and controller.GetCampsOpen()) then
+        or (controller.GetCampsOpen and controller.GetCampsOpen())
+        or (controller.GetFameOpen and controller.GetFameOpen()) then
 
         sheet_open = false
         progress_open = false
+
+        if controller.SetFameOpen then
+            controller.SetFameOpen(false)
+        end
 
         if controller.SetActiveOpen then
             controller.SetActiveOpen(false)
@@ -8317,10 +8847,18 @@ ashita.events.register(
                 or (
                     controller.GetCampsOpen
                     and controller.GetCampsOpen()
+                )
+                or (
+                    controller.GetFameOpen
+                    and controller.GetFameOpen()
                 ) then
 
                 sheet_open = false
                 progress_open = false
+
+                if controller.SetFameOpen then
+                    controller.SetFameOpen(false)
+                end
 
                 if controller.SetActiveOpen then
                     controller.SetActiveOpen(false)
@@ -8467,10 +9005,12 @@ local function draw_journal_help()
         journal_help_window,
     }
 
+
     if imgui.Begin(
         tx('Journal Help') .. '###JournalHelp',
         open
     ) then
+
         local draw =
             imgui.GetWindowDrawList()
 
@@ -8516,6 +9056,14 @@ local function draw_journal_help()
                 tx('Open the camps guide.'),
             },
             {
+                '/journal notes',
+                tx('Open your general notes.'),
+            },
+            {
+                '/journal rank',
+                tx('Show your nation rank.'),
+            },
+            {
                 '/journal help',
                 tx('Show this command list in chat.'),
             },
@@ -8534,10 +9082,6 @@ local function draw_journal_help()
             {
                 '/journal pin preview [on|off]',
                 tx('Show or hide the next step in the tracker.'),
-            },
-            {
-                '/journal lang [en|es]',
-                tx('Switch the Journal between English and Spanish.'),
             },
         }
 
@@ -8570,6 +9114,591 @@ local function draw_journal_help()
     pop_theme()
 end
 
+-- General notes window --------------------------------------------------------
+-- On the left the notes (without a folder first, then each folder with its
+-- notes), on the right the title, the folder and the text of the selected
+-- note, or the name of the selected folder. notes.lua saves everything in a
+-- file shared by all the characters, and also the size of this window.
+
+-- The colors a folder can have (notes.lua keeps the number, 1 to 8).
+notesx.palette = {
+    { 0.90, 0.35, 0.35, 1.0 },
+    { 0.95, 0.60, 0.25, 1.0 },
+    { 0.95, 0.85, 0.35, 1.0 },
+    { 0.45, 0.80, 0.45, 1.0 },
+    { 0.35, 0.75, 0.75, 1.0 },
+    { 0.40, 0.60, 0.95, 1.0 },
+    { 0.68, 0.50, 0.90, 1.0 },
+    { 0.92, 0.55, 0.75, 1.0 },
+}
+
+-- A bar of the color of the folder on the left of the last item.
+function notesx.bar(color, width)
+    local rgba = color and color > 0 and notesx.palette[color] or nil
+
+    if rgba == nil then
+        return
+    end
+
+    local min_x, min_y = imgui.GetItemRectMin()
+    local _, max_y = imgui.GetItemRectMax()
+
+    imgui.GetWindowDrawList():AddRectFilled(
+        { min_x - width - 2, min_y },
+        { min_x - 2, max_y },
+        imgui.GetColorU32(rgba)
+    )
+end
+
+function notesx.draw()
+    local store = controller and controller.notes
+
+    if store == nil
+        or not store.GetOpen()
+        or not can_draw_ui()
+        or imgui.InputText == nil then
+
+        notesx.was_open = false
+
+        return
+    end
+
+    store.Tick()
+
+    if not notesx.was_open then
+        notesx.was_open = true
+        notesx.key = nil
+        notesx.ckey = nil
+        notesx.confirm = nil
+
+        local journal =
+            controller.GetJournalWindowState
+            and controller.GetJournalWindowState()
+
+        local saved = store.GetSize()
+
+        imgui.SetNextWindowSize({
+            saved and saved.w or scaled(720),
+            saved and saved.h or scaled(540),
+        })
+
+        imgui.SetNextWindowPos({
+            ((journal and journal.visible and journal.x) or 40) + 60,
+            ((journal and journal.visible and journal.y) or 40) + 60,
+        })
+    end
+
+    -- The player can drag the corner to resize it.
+    -- Fixed pixel limits so a text-size change does not push the window.
+    if imgui.SetNextWindowSizeConstraints then
+        imgui.SetNextWindowSizeConstraints(
+            { 460, 300 },
+            { 1600, 1400 }
+        )
+    end
+
+    push_theme()
+
+    local font_pushed = journal_font ~= nil
+
+    if font_pushed then
+        imgui.PushFont(journal_font, journal_font_size)
+    end
+
+    local open = { true }
+
+    imgui.PushStyleColor(ImGuiCol_ResizeGrip, { 0.80, 0.84, 0.95, 0.30 })
+    imgui.PushStyleColor(ImGuiCol_ResizeGripHovered, { 0.80, 0.84, 0.95, 0.60 })
+    imgui.PushStyleColor(ImGuiCol_ResizeGripActive, { 0.80, 0.84, 0.95, 0.90 })
+
+
+    if imgui.Begin(
+        tx('General notes') .. '###JournalNotes',
+        open,
+        ImGuiWindowFlags_NoSavedSettings
+            + ImGuiWindowFlags_NoCollapse
+    ) then
+
+        local draw = imgui.GetWindowDrawList()
+        local x, y = imgui.GetWindowPos()
+        local width, height = imgui.GetWindowSize()
+
+        -- Remembered (the file is written a moment after the last change).
+        store.SetSize(width, height)
+
+        draw_window_panel(draw, x, y, width, height, true)
+
+        local list_w = math.floor(math.max(scaled(200), width * 0.32))
+        local half = math.floor((list_w - 8) / 2)
+        local now = os.clock()
+
+        local sel_cat = store.GetSelectedCategory()
+
+        if imgui.Button(
+            tx('New note') .. '##NotesNew',
+            { half, ui_button_height }
+        ) then
+            local index = store.Add(sel_cat)
+
+            if index ~= nil then
+                store.Select(store.Get(index).id)
+                notesx.key = nil
+                notesx.full = 0
+            else
+                notesx.full = now
+            end
+        end
+
+        imgui.SameLine(0, 8)
+
+        if imgui.Button(
+            tx('New folder') .. '##NotesNewFolder',
+            { half, ui_button_height }
+        ) then
+            local id = store.AddCategory()
+
+            if id ~= nil then
+                store.SelectCategory(id)
+                notesx.ckey = nil
+                notesx.full = 0
+            else
+                notesx.full = now
+            end
+        end
+
+        if notesx.full > 0 and now - notesx.full < 4 then
+            imgui.SameLine(0, 12)
+            imgui.TextColored(
+                colors.text_dim,
+                tx('The notes list is full.')
+            )
+        end
+
+        imgui.Spacing()
+
+        imgui.PushStyleColor(ImGuiCol_ChildBg, transparent)
+
+        -- The list.
+        if imgui.BeginChild('##NotesList', { list_w, -1 }, child_border) then
+            local rows = store.Rows()
+
+            if #rows == 0 then
+                imgui.TextWrapped(
+                    tx('No notes yet. Click New note to write one.')
+                )
+            end
+
+            local toggle_w = ui_button_height
+
+            for _, row in ipairs(rows) do
+                if row.kind == 'folder' then
+                    local cat = row.cat
+
+                    if imgui.Button(
+                        (cat.collapsed and '+' or '-')
+                            .. '##NotesFold' .. tostring(cat.id),
+                        { toggle_w, ui_button_height }
+                    ) then
+                        store.SetCollapsed(cat.id, not cat.collapsed)
+                    end
+
+                    imgui.SameLine(0, 4)
+
+                    if toolbar_mode_button(
+                        cat.name .. ' (' .. row.count .. ')'
+                            .. '##NotesCat' .. tostring(cat.id),
+                        cat.id == sel_cat,
+                        list_w - toggle_w - 24
+                    ) then
+                        store.SelectCategory(cat.id)
+                    end
+
+                    notesx.bar(cat.color, 5)
+                else
+                    local note = row.note
+                    local indent = row.nested and scaled(24) or 0
+
+                    if indent > 0 then
+                        imgui.Dummy({ indent, 1 })
+                        imgui.SameLine(0, 0)
+                    end
+
+                    if toolbar_mode_button(
+                        (store.Title(note, 22) or tx('Empty note'))
+                            .. '##note' .. tostring(note.id),
+                        note.id == store.GetSelected(),
+                        list_w - 20 - indent
+                    ) then
+                        store.Select(note.id)
+                    end
+
+                    if row.nested then
+                        local owner = store.GetCategory(note.cat)
+
+                        notesx.bar(owner and owner.color, 3)
+                    end
+                end
+            end
+        end
+
+        imgui.EndChild()
+
+        imgui.SameLine(0, 8)
+
+        -- The right side.
+        if imgui.BeginChild('##NotesEdit', { -1, -1 }, child_border) then
+            -- The room of the right side. If the call is not there, it is
+            -- worked out from the window.
+            local avail_w, avail_h = nil, nil
+
+            if imgui.GetContentRegionAvail ~= nil then
+                local ok, aw, ah = pcall(imgui.GetContentRegionAvail)
+
+                if ok then
+                    avail_w, avail_h = tonumber(aw), tonumber(ah)
+                end
+            end
+
+            avail_w = avail_w or (width - list_w - 40)
+            avail_h = avail_h or (height - ui_button_height - 60)
+
+            local index = store.IndexOfId(store.GetSelected())
+            local note = index and store.Get(index) or nil
+            local cat = sel_cat and store.GetCategory(sel_cat) or nil
+
+            if cat ~= nil then
+                -- A folder: its name and a delete.
+                if notesx.ckey ~= cat.id then
+                    notesx.ckey = cat.id
+                    notesx.cbuf[1] = cat.name
+                    notesx.confirm = nil
+                end
+
+                imgui.TextColored(colors.text_dim, tx('Folder'))
+
+                imgui.PushItemWidth(math.max(120, avail_w))
+
+                local typed = imgui.InputText(
+                    '##NotesFolderName',
+                    notesx.cbuf,
+                    store.CAT_NAME_MAX + 1
+                )
+
+                imgui.PopItemWidth()
+
+                if imgui.IsItemActive() then
+                    note_input_active = true
+                end
+
+                if typed then
+                    store.RenameCategory(cat.id, notesx.cbuf[1])
+                end
+
+                imgui.Spacing()
+                imgui.TextColored(colors.text_dim, tx('Color'))
+
+                -- No color, then the eight of the palette.
+                local swatch = math.floor(ui_button_height * 0.75)
+
+                for number = 0, store.COLOR_COUNT do
+                    if number > 0 then
+                        imgui.SameLine(0, 6)
+                    end
+
+                    if imgui.Button(
+                        '##NotesColor' .. number,
+                        { swatch, swatch }
+                    ) then
+                        store.SetCategoryColor(cat.id, number)
+                    end
+
+                    local min_x, min_y = imgui.GetItemRectMin()
+                    local max_x, max_y = imgui.GetItemRectMax()
+                    local sdraw = imgui.GetWindowDrawList()
+                    local rgba = notesx.palette[number]
+
+                    if rgba ~= nil then
+                        sdraw:AddRectFilled(
+                            { min_x + 3, min_y + 3 },
+                            { max_x - 3, max_y - 3 },
+                            imgui.GetColorU32(rgba)
+                        )
+                    else
+                        -- None: an empty square with a slash.
+                        sdraw:AddLine(
+                            { min_x + 5, max_y - 5 },
+                            { max_x - 5, min_y + 5 },
+                            imgui.GetColorU32(colors.text_dim),
+                            2.0
+                        )
+                    end
+
+                    -- The chosen one has a frame.
+                    if (cat.color or 0) == number then
+                        sdraw:AddRect(
+                            { min_x, min_y },
+                            { max_x, max_y },
+                            imgui.GetColorU32(colors.text),
+                            0,
+                            0,
+                            2.0
+                        )
+                    end
+                end
+
+                imgui.Spacing()
+                imgui.TextWrapped(
+                    tx('Notes in a deleted folder are kept, without a folder.')
+                )
+                imgui.Spacing()
+
+                local confirming =
+                    notesx.confirm == 'c' .. cat.id
+                    and now - (notesx.confirm_time or 0) < 4
+
+                local label =
+                    confirming and tx('Click again to delete')
+                    or tx('Delete folder')
+
+                if imgui.Button(
+                    label .. '##NotesDeleteFolder',
+                    {
+                        math.max(
+                            scaled(140),
+                            math.ceil((imgui.CalcTextSize(label)) + 28)
+                        ),
+                        ui_button_height,
+                    }
+                ) then
+                    if confirming then
+                        store.DeleteCategory(cat.id)
+                        store.SelectCategory(nil)
+                        notesx.ckey = nil
+                        notesx.confirm = nil
+                    else
+                        notesx.confirm = 'c' .. cat.id
+                        notesx.confirm_time = now
+                    end
+                end
+            elseif note == nil then
+                imgui.TextWrapped(
+                    tx('Select a note, or create a new one.')
+                )
+            else
+                if notesx.key ~= note.id then
+                    notesx.key = note.id
+                    notesx.buffer[1] = note.text
+                    notesx.tbuf[1] = note.title
+                    notesx.confirm = nil
+                end
+
+                -- The title.
+                imgui.PushItemWidth(math.max(120, avail_w))
+
+                local title_typed = imgui.InputText(
+                    '##NotesTitle',
+                    notesx.tbuf,
+                    store.TITLE_MAX + 1
+                )
+
+                imgui.PopItemWidth()
+
+                local title_active = imgui.IsItemActive()
+
+                if title_active then
+                    note_input_active = true
+                end
+
+                if title_typed then
+                    store.SetTitle(index, notesx.tbuf[1])
+                end
+
+                if notesx.tbuf[1] == '' and not title_active then
+                    local box_x, box_y = imgui.GetItemRectMin()
+                    local _, box_bottom = imgui.GetItemRectMax()
+
+                    imgui.GetWindowDrawList():AddText(
+                        {
+                            box_x + 8,
+                            box_y
+                                + (
+                                    (box_bottom - box_y)
+                                    - imgui.GetTextLineHeight()
+                                ) * 0.5,
+                        },
+                        imgui.GetColorU32(colors.text_dim),
+                        tx('Title')
+                    )
+                end
+
+                -- The folder of the note.
+                local current = store.GetCategory(note.cat)
+                local current_name =
+                    current and current.name or tx('No folder')
+
+                imgui.TextColored(colors.text_dim, tx('Folder'))
+                imgui.SameLine(0, 8)
+
+                local cats = store.GetCategories()
+
+                if imgui.BeginCombo ~= nil
+                    and imgui.EndCombo ~= nil
+                    and imgui.Selectable ~= nil then
+
+                    imgui.PushItemWidth(math.max(120, avail_w - scaled(90)))
+
+                    if imgui.BeginCombo(
+                        '##NotesFolder',
+                        current_name
+                    ) then
+                        if imgui.Selectable(
+                            tx('No folder') .. '##NotesFolder0',
+                            note.cat == 0
+                        ) then
+                            store.SetCategory(index, 0)
+                        end
+
+                        for _, option in ipairs(cats) do
+                            if imgui.Selectable(
+                                option.name
+                                    .. '##NotesFolder' .. tostring(option.id),
+                                note.cat == option.id
+                            ) then
+                                store.SetCategory(index, option.id)
+                            end
+                        end
+
+                        imgui.EndCombo()
+                    end
+
+                    imgui.PopItemWidth()
+                else
+                    -- Without a list: the button goes to the next folder.
+                    if imgui.Button(
+                        current_name .. '##NotesFolderCycle',
+                        { math.max(120, avail_w - scaled(90)), ui_button_height }
+                    ) then
+                        local next_id = cats[1] and cats[1].id or 0
+
+                        for position, option in ipairs(cats) do
+                            if option.id == note.cat then
+                                next_id = cats[position + 1]
+                                    and cats[position + 1].id or 0
+                            end
+                        end
+
+                        store.SetCategory(index, next_id)
+                    end
+                end
+
+                imgui.Spacing()
+
+                -- The text.
+                local box = {
+                    math.max(120, avail_w),
+                    math.max(80, avail_h - 3 * ui_button_height - 40),
+                }
+
+                local typed
+
+                if imgui.InputTextMultiline ~= nil then
+                    typed = imgui.InputTextMultiline(
+                        '##NotesText',
+                        notesx.buffer,
+                        store.TEXT_MAX + 1,
+                        box
+                    )
+                else
+                    imgui.PushItemWidth(box[1])
+
+                    typed = imgui.InputText(
+                        '##NotesText',
+                        notesx.buffer,
+                        store.TEXT_MAX + 1
+                    )
+
+                    imgui.PopItemWidth()
+                end
+
+                local active = imgui.IsItemActive()
+
+                if active then
+                    note_input_active = true
+                end
+
+                if typed then
+                    store.SetText(index, notesx.buffer[1])
+                end
+
+                -- Hint inside the empty box.
+                if notesx.buffer[1] == '' and not active then
+                    local box_x, box_y = imgui.GetItemRectMin()
+
+                    imgui.GetWindowDrawList():AddText(
+                        { box_x + 8, box_y + 6 },
+                        imgui.GetColorU32(colors.text_dim),
+                        tx('Write your note here')
+                    )
+                end
+
+                -- Delete asks for a second click.
+                local confirming =
+                    notesx.confirm == note.id
+                    and now - (notesx.confirm_time or 0) < 4
+
+                local label =
+                    confirming and tx('Click again to delete')
+                    or tx('Delete')
+
+                if imgui.Button(
+                    label .. '##NotesDelete',
+                    {
+                        math.max(
+                            scaled(120),
+                            math.ceil((imgui.CalcTextSize(label)) + 28)
+                        ),
+                        ui_button_height,
+                    }
+                ) then
+                    if confirming then
+                        store.Delete(index)
+                        store.Select(nil)
+                        notesx.key = nil
+                        notesx.confirm = nil
+                    else
+                        notesx.confirm = note.id
+                        notesx.confirm_time = now
+                    end
+                end
+
+                imgui.SameLine(0, 12)
+                imgui.TextColored(
+                    colors.text_dim,
+                    #notesx.buffer[1] .. '/' .. store.TEXT_MAX
+                )
+            end
+        end
+
+        imgui.EndChild()
+
+        imgui.PopStyleColor()
+    end
+
+    imgui.End()
+
+    imgui.PopStyleColor(3)
+
+    if not open[1] then
+        store.SetOpen(false)
+    end
+
+    if font_pushed then
+        imgui.PopFont()
+    end
+
+    pop_theme()
+end
+
 function M.Draw()
     -- Set again by the note box of this frame, if it has the keyboard.
     note_input_active = false
@@ -8588,6 +9717,8 @@ function M.Draw()
     draw_settings_window()
     draw_guide_window()
     draw_camps_window()
+    fame_ui.draw()
+    notesx.draw()
     draw_journal_mini()
     draw_journal_help()
 end

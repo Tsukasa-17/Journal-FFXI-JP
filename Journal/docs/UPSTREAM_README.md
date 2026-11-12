@@ -3,15 +3,15 @@
 FFXI Journal is an Ashita addon for **Final Fantasy XI** focused on providing a unified in-game journal for missions and quests.
 
 **Author:** Kxteel
-**Version:** 0.3.0
+**Version:** 0.3.7
 
 It includes mission and quest progression tracking, organized quest categories, objective lists, detailed quest information, a pinned Tracker, and controller/keyboard navigation.
 
 ## Compass, alerts and arrows in the game world
 
-**Compass.** "Point compass here" points the compass at the NPC of the current step of a quest or mission. The list of NPCs chosen with the search and the pins of the Tracker also show in it. When you get within 20 yalms of an NPC (kept up to 30) that starts a quest you can start, or that has a quest of yours in progress, the NPC is added to the compass by itself (at most 3 automatic ones, and the compass opens if it was closed); its quests are listed under it and a click opens them in the Journal.
+**Compass.** "Point compass here" points the compass at the NPC of the current step of a quest or mission. The list of NPCs chosen with the search and the pins of the Tracker also show in it. When you get within 30 yalms of an NPC (kept up to 35) that starts a quest you can start, or that has a quest of yours in progress, the NPC is added to the compass by itself (at most 3 automatic ones, and the compass opens if it was closed); its quests are listed under it and a click opens them in the Journal.
 
-**Alerts.** "Quest Nearby" (near an NPC) lists the quests you can start there. "Quest In Progress" (when you enter a zone) lists the quests you have in progress that belong to that zone, stays a little longer, and its quests open in the Journal with a click. A quest can be started when your main job has the level it needs and the quests it follows are completed; this is read from the requirements and from the text of the first step. Fame, skill, job, mission and expansion pack requirements are not checked.
+**Alerts.** "Quest Nearby" (near an NPC) lists the quests you can start there. "Quest In Progress" (when you enter a zone) lists the quests you have in progress that belong to that zone, stays a little longer, and its quests open in the Journal with a click. A quest can be started when your main job has the level it needs and the quests it follows are completed; this is read from the requirements and from the text of the first step. Skill, job, mission and expansion pack requirements are not checked. Fame is checked for the quests of San d'Oria, Bastok, Windurst and Jeuno that say `Fame N`, once you have read the Fame of that nation.
 
 **Arrows in the game world (prototype).** `/journal mark [on|off|debug]` (or the checkbox in Settings > Compass) draws arrows over the NPCs of the compass in the game, found with the camera of Direct3D. It is off by default.
 
@@ -20,6 +20,7 @@ It includes mission and quest progression tracking, organized quest categories, 
 - No arrow: every quest the NPC starts needs a level your main job has not reached (and quests not implemented on the server).
 - Green circular arrow, turning: the NPC has a quest of yours in progress. NPCs that are not in the compass list get it only within 45 yalms (kept up to 50).
 - An arrow at the edge of the screen points to an NPC that is out of view or behind the camera.
+- Custom icons: put PNG files with a transparent background (for example 64x64) in `assets/arrows/` named `available.png` (yellow arrow), `locked.png` (grey arrow) and `progress.png` (green circular arrow). Each one replaces its arrow, drawn with its bottom on the NPC and a short bob. A missing or unreadable file leaves the arrow of triangles. The files are looked for when the addon loads (`/addon reload journal` after adding them). The arrow at the edge of the screen has no custom icon.
 - Settings > Compass: arrow over the compass NPC, arrows over all the NPCs of the compass, green arrow over the NPC of each quest in progress, and arrow at the edge of the screen.
 - `/journal mark debug` prints what the addon read from Direct3D, the combination of axes it chose, and how many arrows it draws. Positions of NPCs are the fixed ones of `data/npc_positions.lua`, so an NPC without a known position has no arrow.
 
@@ -52,6 +53,56 @@ FFXI Journal is an independent project and is not affiliated with Square Enix.
 Versions follow `0.MINOR.PATCH`. From **0.1.6** on, every release is listed in the changelog below, newest first, and the version in `journal.lua` (`addon.version`) matches the latest entry.
 
 ## Changelog
+
+### 0.3.7
+
+- General notes: a folder can have a color. Select the folder and pick one of the eight colors (or none) in the Color row; the folder and its notes get a bar of that color in the list.
+- Toolbar of the Journal: the **Settings** button is gray with a bright border and sits at the right corner, next to the search box. The Settings window can be resized with its corner and remembers its size between sessions.
+- New **menu** button (three lines) to the left of Settings. It opens a list with one row for each function (icon and name). It groups the new adventurer guide and the camps, whose own buttons are gone from the bar; the functions to come go in this list too.
+- The **Active Now** button has a green border that pulses (brighter and thicker while its window is open).
+- The **Missions** button uses the blue of the missions and the **Quests** button the yellow of the quests: solid when active, a dark shade when not.
+- The text size of the Journal goes down to **50%** (before 80%). When the text size changes, the open windows (Journal, sheet, Progress, Active Now, Settings, guide, camps, general notes and help) grow or shrink by the same factor.
+- **Items you have**: when a step of a quest or mission asks for an item ("Obtain Honey x5", "Trade the Black Tiger Fang x3 to ..."), a green V is drawn after the name if you have enough of it, and a counter such as (2/5) while you have some but not enough. It is shown in the steps of the Journal, in the quest sheet and in the Tracker. The count includes everything you own that the game lets the addon read: bag, mog safe, storage, locker, satchel, sack, case and the wardrobes (not the temporary items). Key items named by a step get the green V too when you have them. Items named as a reward ("... and receive X") are not marked. The names are read from the game resources in the first moments after the Journal is drawn, so the marks appear a second later. New file `inventory.lua`.
+- **Fame** of the nations: the game does not send it to the client, but talking to a Fame Checker NPC (Namonutice in Southern San d'Oria, Flaco in Port Bastok, Zabirego-Hajigo in Windurst Waters or Ney Hiparujah in Kazham, Mendi in Lower Jeuno, Vaultimand in Norg, Waylea in Rabao) starts an event that says the level. The addon reads that event, saves the level for the character and shows it in the new Fame window, opened from the menu button (≡) next to Settings, resizable (the size is saved), with a line between nations and the Fame Checker names clickable to point the compass at them (their positions were added to `data/npc_positions.lua`) (San d'Oria, Bastok, Windurst, Jeuno, Norg, Selbina / Rabao) of the settings window ("Unknown" until you talk to the NPC; it only changes when you talk to the NPC again). `/journal fame debug [on|off]` writes every event packet of the server to the chat and to `fame_log.txt` (addon folder), to check what your server sends. New file `fame.lua`.
+- **Quests locked by fame.** A quest that needs more Fame than you have (the `Fame N` requirement of the data, for San d'Oria, Bastok, Windurst and Jeuno) now shows the locked icon in the Journal and the sheet, and counts as locked for the compass arrows and the alerts. It only applies after you have read the Fame of that nation; with "Unknown" fame nothing is locked.
+- **Fame of another nation.** A quest can say which nation's Fame it needs with `fame_area` in its data (two Bastok quests, Silence of the Rams and Faded Promises, need the Fame of Norg). Checked against the LandSandBoat scripts: *Ducal Hospitality* now says `Fame 4` (Jeuno) besides its mission requirement.
+- **Fame added to quests that lacked it** (from the LandSandBoat scripts): Atelloune's Lament (Fame 2), All at Sea (3), Making Amends (2), Rock Racketeer (3) and, with the nation in `fame_area`, The Sand Charm and A Question of Taste, Everyone's Grudging, Trial by Fire, You Call That a Knife? (Windurst); It's Not Your Vault, Like Shining Leggings, Secret of the Damp Scroll, Stop Your Whining, The Sahagin's Stash (Norg); Under the Sea, The Kuftal Tour, The Missing Piece (Selbina/Rabao).
+- **Icon of the Fame Checkers.** The NPCs that read the Fame (Namonutice, Flaco, Zabirego-Hajigo, Ney Hiparujah, Mendi, Vaultimand, Waylea) have their own icon (`assets/arrows/fame.png`, 128x128): over the NPC in the game world when it is in the compass list, before its name in the compass list and in the Fame window, and as the icon of the Fame entry of the menu. A missing file leaves the arrow (world), nothing (lists) or the drawn star (menu).
+- **Fame Checkers in the automatic compass.** The NPCs that read the Fame are now found by the proximity radar like the NPCs that start quests: they enter the compass list by themselves when you are within 30 yalms and leave beyond 35 (same setting as the other NPCs, and they count in the limit of 3 automatic ones). They have no quests to list and no "Quest Nearby" banner.
+- Alerts of a new quest or mission: the icon of the quest or mission (available) is drawn left of the name. The completed quest and mission alerts have their completed icon too. The "Pin" button is now small and gray, with a pin icon and the word "Pin" ("Fijar"), and the "No thanks" button is gone: the alert leaves by itself after 14 seconds if it is not pinned.
+- **Rank and missions:** the addon reads the rank of your character in its own nation (packet 0x061; `/journal rank` shows it). The missions of your nation that need a higher rank show the *locked* icon. The ranks of the other two nations are not sent by the game, so their missions are only locked by the order of the chain.
+- **Gate Guards:** the missions of the three nations name their Gate Guards (San d'Oria: Ambrotien, Endracion, Grilau; Bastok: Argus, Cleades, Malduc, Rashid; Windurst: Mokyokyo, Janshura-Rashura, Rakoh Buuma, Zokima-Rokima). They go to the automatic compass when you are close and carry the mission icon (available, in progress or not available).
+- New icon `mission_progress.png` (assets/arrows) for a mission in progress: mission rows, Tracker pins and the mission Gate Guards. Without the file, the *available* icon is used.
+
+### 0.3.6
+
+- General notes: every note has a title (the list shows the title, or the first line of the text if it has none) and can be put in a folder. "New folder" creates one; click its name to rename or delete it (its notes are kept, without a folder), and the +/- button next to it collapses it. "New note" creates the note inside the selected folder; the Folder box of a note moves it to another one. The window can be resized with the corner and its size is saved with the notes. Files written by 0.3.5 are read as they are.
+
+### 0.3.5
+
+- General notes: a sticky-note button in the toolbar of the Journal (or `/journal notes`) opens a window with a list of free notes and a text box. The notes are shared by all your characters and are saved in `shared_notes.lua` (in Ashita's `config/addons/journal/` folder, or in the addon folder if that cannot be written). The list holds up to 100 notes of 2000 characters. Deleting a note asks for a second click.
+
+### 0.3.4
+- The mission lists show a flame-ring icon for the completed missions (`assets/arrows/mission_completed.png`), a padlock one for the ones that are not available yet (`mission_locked.png`), and a book one for the missions in progress and the available ones (`mission_available.png`). A mission is not available when it is not started and an earlier mission of the same story (nation, Zilart, CoP, ToAU, WotG, Adoulin, RoV, ACP, MKD, ASA, TVR) is not completed; the first one not completed is the next to take. It is deduced from the order of the data, so missions with branches may be shown as not available. Without the PNG files the dots stay.
+- The quest lists (Journal list, search results, the quests of an area, and the Active Now window) show the quest icon instead of the blue and green dot: in progress, available, or locked. The completed ones show the completed icon (`assets/arrows/completed.png`), and the repeatable ones the repeatable icon; missions keep their dots. Without the PNG files the dots stay.
+- The quests in the Tracker have their small icon at the start of the name (available, in progress, repeatable, locked or completed); the missions have the mission icons.
+- The quest names in the "Quest in progress" and "Quest nearby" banners also have their small icon before the name (in progress or available).
+- Each quest listed under an NPC in the compass window has its small icon before the name (available, in progress or repeatable), the same ones as over the NPC in the game world. Without the PNG files, no icon is drawn.
+- The NPCs of the compass window are listed from the closest to the farthest (the ones in another zone go last).
+- A click on a quest in the automatic compass or on the name of a quest in the Tracker now opens the **quest sheet** (not the Journal). The sheet can be resized by dragging its corner, and it remembers its size. The names in the banners ("Quest nearby" and "Quest in progress") open the sheet too.
+- The automatic compass now adds NPCs from 30 yalms (kept up to 35, before 20 and 30).
+- An NPC with a repeatable quest (in progress or completed) keeps the repeatable icon, unless it also has a quest that can be started (yellow) or another quest in progress (green). The automatic compass also lists NPCs whose repeatable quest is completed.
+
+### 0.3.3
+- NPCs whose quest is repeatable and already completed keep a blue "repeatable" icon (`assets/arrows/repeatable.png`; without it, a blue arrow).
+
+### 0.3.2
+- The custom icons are 30% bigger and sit lower, closer to the head of the NPC.
+
+### 0.3.1
+
+**Arrows in the game world**
+- New: custom icons. PNG files in `assets/arrows/` (`available.png`, `locked.png`, `progress.png`) replace the yellow, grey and green arrows over the NPCs. If a file is missing or cannot be loaded, the arrow drawn with triangles is used. See "Compass, alerts and arrows in the game world".
 
 ### 0.3.0
 
