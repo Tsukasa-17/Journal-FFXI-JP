@@ -579,6 +579,26 @@ end
 check('jp flint name parses four', marked_ja('Aquillinaに火打石4個を渡して100ギル。', { ['火打石'] = 4 }):find('VV', 1, true) ~= nil)
 check('jp flint short is not enough', marked_ja('火打石4個を用意。', { ['火打石'] = 1 }):find('(1/4)', 1, true) ~= nil)
 check('jp flint none stays unmarked', marked_ja('火打石4個を用意。', { ['火打石'] = 0 }) == '火打石4個を用意。')
+check('jp hides one of three', marked_ja('トカゲの皮3枚を用意。', { ['トカゲの皮'] = 1 }):find('(1/3)', 1, true) ~= nil)
+check('jp hides three is enough', marked_ja('トカゲの皮3枚を用意。', { ['トカゲの皮'] = 3 }):find('VV', 1, true) ~= nil)
+check('jp hides none stays unmarked', marked_ja('トカゲの皮3枚を用意。', { ['トカゲの皮'] = 0 }) == 'トカゲの皮3枚を用意。')
+check('sheet count after particle', rich.quantity_after('大羊の毛皮を3枚用意する。', #'大羊の毛皮') == 3)
+check('tube count', rich.quantity_after('空の試験管5本', #'空の試験管') == 5)
+check('feather count after particle', rich.quantity_after('ヒポグリフの尾羽根を2本渡す。', #'ヒポグリフの尾羽根') == 2)
+check('toad count', rich.quantity_after('ヒキガエル3匹と茗荷1個', #'ヒキガエル') == 3)
+check('letter count', rich.quantity_after('手紙4通', #'手紙') == 4)
+check('map ordinal is not a count', rich.quantity_after('2枚目のマップ', 0) == nil)
+local skin_styles = {
+    { kind = 'item', index = { { name = 'lizard skin' } } },
+}
+check('english skin sheets one of three', rich.annotate(
+    'Lizard Skin3枚を用意。',
+    skin_styles,
+    function(_, quantity)
+        if 1 >= quantity then return 'ok', 1 end
+        return 'partial', 1
+    end
+):find('(1/3)', 1, true) ~= nil)
 check('flash step uses flint', words['Obtain Flint Stone x4. It drops from worm type enemies such as Tunnel Worm, Carrion Worm and Stone Eater, and can also be found at the Auction House (Materials, Goldsmithing).']:find('火打石4個', 1, true) ~= nil)
 check('shady step uses zinc', words['Obtain Zinc Ore x4. It can be bought from Teerth in Bastok Markets for 200 gil, from Celestina in Mhaura for 200 gil, or at the Auction House, or you can mine it from a Mineral Vein.']:find('亜鉛鉱4個', 1, true) ~= nil)
 check('ja count check when enough', marked('Honey5個を用意。', { Honey = 5 }):find('VV', 1, true) ~= nil)

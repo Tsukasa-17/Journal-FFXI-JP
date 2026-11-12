@@ -114,8 +114,10 @@ function M.spans(text, index)
             -- still the end of the name, not part of it.
             local after_ok = not is_word_char(after)
 
+            -- "Lizard Skin3枚" glues the count to the English name. The
+            -- digit is still the end of the name. 個 is not the only unit.
             if not after_ok and after:match('%d') then
-                after_ok = haystack:sub(e + 1):find('^%d+%s*個') ~= nil
+                after_ok = M.quantity_after(haystack, e) ~= nil
             end
 
             if (japanese and ja_style.boundary(haystack, s, e))
@@ -586,14 +588,51 @@ local function is_count_mark(text, index)
     return nil
 end
 
--- Quantity written on the item: "x5", "×5", or Japanese "5個" / "Honey5個".
+-- Counters that follow an item name as a needed count. 枚目 is an
+-- ordinal ("2枚目のマップ") and is not a count.
+local COUNT_UNITS = { '個', '枚', '本', '匹', '通' }
+
+local function skip_spaces(text, index, length)
+    while index <= length and text:sub(index, index):match('%s') do
+        index = index + 1
+    end
+
+    return index
+end
+
+local function count_unit_len(text, index)
+    for _, unit in ipairs(COUNT_UNITS) do
+        if text:sub(index, index + #unit - 1) == unit then
+            if unit == '枚'
+                and text:sub(index + #unit, index + #unit + 2) == '目' then
+
+                return nil
+            end
+
+            return #unit
+        end
+    end
+
+    return nil
+end
+
+-- Quantity written on the item: "x5", "×5", "5個", "3枚", "を2本".
 -- Returns quantity, end index (inclusive), or nil when no count is written.
 function M.quantity_after(text, position)
     local i = position + 1
     local n = #text
 
-    while i <= n and text:sub(i, i):match('%s') do
-        i = i + 1
+    i = skip_spaces(text, i, n)
+
+    -- 「大羊の毛皮を3枚」「尾羽根を2本」: the particle sits before the count.
+    if text:sub(i, i + 2) == 'を' then
+        local after_particle = skip_spaces(text, i + 3, n)
+
+        if read_digit(text, after_particle)
+            or is_count_mark(text, after_particle) then
+
+            i = after_particle
+        end
     end
 
     local mark = is_count_mark(text, i)
@@ -631,15 +670,15 @@ function M.quantity_after(text, position)
         return nil
     end
 
-    local ko = text:sub(i):find('^%s*個')
+    local unit_at = skip_spaces(text, i, n)
+    local unit_len = count_unit_len(text, unit_at)
 
-    if not saw_mark and ko == nil then
+    if not saw_mark and unit_len == nil then
         return nil
     end
 
-    if ko ~= nil then
-        local _, ko_end = text:sub(i):find('^%s*個')
-        i = i + ko_end
+    if unit_len ~= nil then
+        i = unit_at + unit_len
     end
 
     return tonumber(table.concat(digits)) or 1, i - 1

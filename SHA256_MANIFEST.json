@@ -1,5 +1,5 @@
 {
-  "Journal/CHANGES_JP.md": "f849f559eaa95d00b04b7da296c17065cb6239cc123031deb054bfa7efd7e1bc",
+  "Journal/CHANGES_JP.md": "a786bc5045d7d1fc9700676301bdcfcf4a4286492e2aebe5f1d4f791b0d391d7",
   "Journal/COPYING": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
   "Journal/LICENSE": "4bc852f934fe7f28858842b778d9153edb8b83fdb6e5e50c2af86742d7f3cb3c",
   "Journal/LICENSE_SCOPE.md": "56ad0b4dda26607a6ae1fe9746f0d08bf6902d1d403b4e484492417099d74078",
@@ -120,7 +120,7 @@
   "Journal/mini_icon.lua": "6bcb081e10f37d18afe5d1e061522c99dc08b812744ef197d0d41aa94aa514b8",
   "Journal/personal.lua": "4bf5aeb2cbcb912261737291c37323a8431b48ca8eaf347fad6ad5f0c97e715c",
   "Journal/pinned.lua": "84b82c9378d824257b0ca47884e6f61a81b631fa7e47e5b6398d2058b3967eba",
-  "Journal/richtext.lua": "3149c78894ed3a3b2d388138e5023474847bf7c162b641d265aea5fdd4291e16",
+  "Journal/richtext.lua": "a959655ecc10f55258d7beed83f41c79566d19cbfc544195b04b1fe0b47c7941",
   "Journal/sound_gain.lua": "30b06613257bbdc71a4d1c83e67cb5b22293f134814438b88a5f6b6dec28d854",
   "Journal/style_ja.lua": "0522b0e17d5bca38ce9a9d28334134a0352abbbf3c289ac06e6a6abd813bea6e",
   "Journal/tracker.lua": "3ecdbcf000b2ea4354026d5afc2bb96287c8cc3872c89bfd0620f9ea27ae836b",
