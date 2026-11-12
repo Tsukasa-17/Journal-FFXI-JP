@@ -40,6 +40,7 @@ local watched = {}
 
 local function normalize(name)
     name = tostring(name or ''):lower()
+    name = name:gsub('%z+$', '')
     name = name:gsub("'", ''):gsub('`', ''):gsub('\226\128\153', '')
     name = name:gsub('%s+', ' '):gsub('^ ', ''):gsub(' $', '')
 
@@ -47,6 +48,71 @@ local function normalize(name)
 end
 
 M.normalize = normalize
+
+-- English step names are in the Ashita index. Japanese step text uses the
+-- official names from data.style_aliases_ja. Missing module: names stay as
+-- the resources gave them.
+local alias_table = nil
+
+local function aliases()
+    if alias_table ~= nil then
+        return alias_table
+    end
+
+    local ok, result = pcall(require, 'data.style_aliases_ja')
+
+    if ok and type(result) == 'table' then
+        alias_table = result
+    else
+        alias_table = false
+    end
+
+    return alias_table
+end
+
+-- Copy each English id list onto its Japanese name. A Japanese key that
+-- Ashita already filled (Name[2]) is left alone.
+local function apply_aliases(names)
+    local map = aliases()
+
+    if map == false then
+        return
+    end
+
+    for english, japanese in pairs(map) do
+        if type(english) == 'string' and type(japanese) == 'string' then
+            local from = names[normalize(english)]
+            local key = normalize(japanese)
+
+            if from ~= nil and key ~= '' and names[key] == nil then
+                names[key] = from
+            end
+        end
+    end
+end
+
+-- The displayed name may arrive after the index was finished.
+local function alias_target(names, key)
+    local map = aliases()
+
+    if map == false then
+        return nil
+    end
+
+    for english, japanese in pairs(map) do
+        if type(japanese) == 'string' and normalize(japanese) == key then
+            local found = type(english) == 'string'
+                and names[normalize(english)]
+                or nil
+
+            if found ~= nil then
+                return found
+            end
+        end
+    end
+
+    return nil
+end
 
 local function index_slice()
     local ok, manager = pcall(function()
@@ -101,6 +167,7 @@ local function index_slice()
 
     if index.next_id > INDEX_MAX then
         index.done = true
+        apply_aliases(index.names)
         version = version + 1
     end
 end
@@ -154,6 +221,7 @@ local function key_slice()
 
     if key_index.next_id > KEY_MAX then
         key_index.done = true
+        apply_aliases(key_index.names)
         version = version + 1
     end
 end
@@ -273,8 +341,16 @@ function M.Status(name, quantity)
     local ids = index.names[key]
 
     if ids == nil then
+        ids = alias_target(index.names, key)
+    end
+
+    if ids == nil then
         -- Not an item: maybe a key item (there is only one of each).
         local key_id = key_index.done and key_index.names[key] or nil
+
+        if key_id == nil and key_index.done then
+            key_id = alias_target(key_index.names, key)
+        end
 
         if key_id == nil then
             return nil
@@ -315,6 +391,30 @@ function M.Reset()
     index = { names = {}, next_id = 1, done = false }
     key_index = { names = {}, next_id = 0, done = false }
     watched = {}
+end
+
+-- Inject a finished name index and counts. aliases are copied the same way
+-- as when the resource scan finishes, unless apply_aliases is false.
+function M.SetTestIndex(spec)
+    spec = spec or {}
+
+    M.Reset()
+    index.names = spec.names or {}
+    index.done = true
+    counts = spec.counts or {}
+
+    if spec.keys ~= nil then
+        key_index.names = spec.keys
+        key_index.done = true
+    end
+
+    if spec.apply_aliases ~= false then
+        apply_aliases(index.names)
+
+        if key_index.done then
+            apply_aliases(key_index.names)
+        end
+    end
 end
 
 return M

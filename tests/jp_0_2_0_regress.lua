@@ -579,6 +579,44 @@ end
 check('jp flint name parses four', marked_ja('Aquillinaに火打石4個を渡して100ギル。', { ['火打石'] = 4 }):find('VV', 1, true) ~= nil)
 check('jp flint short is not enough', marked_ja('火打石4個を用意。', { ['火打石'] = 1 }):find('(1/4)', 1, true) ~= nil)
 check('jp flint none stays unmarked', marked_ja('火打石4個を用意。', { ['火打石'] = 0 }) == '火打石4個を用意。')
+local inventory = require('inventory')
+inventory.SetTestIndex({
+    names = { ['flint stone'] = { 880 } },
+    counts = { [880] = 4 },
+})
+local flint_state, flint_have = inventory.Status('火打石', 4)
+check('status flint ja enough', flint_state == 'ok' and flint_have == 4)
+local flint_en_state = inventory.Status('Flint Stone', 4)
+check('status flint english enough', flint_en_state == 'ok')
+inventory.SetTestIndex({
+    names = { ['flint stone'] = { 880 } },
+    counts = { [880] = 1 },
+})
+local flint_short, flint_short_have = inventory.Status('火打石', 4)
+check('status flint ja one of four', flint_short == 'partial' and flint_short_have == 1)
+inventory.SetTestIndex({
+    names = { ['flint stone'] = { 880 } },
+    counts = { [880] = 0 },
+})
+local flint_none, flint_none_have = inventory.Status('火打石', 4)
+check('status flint ja none', flint_none == 'partial' and flint_none_have == 0)
+inventory.SetTestIndex({
+    names = { ['flint stone'] = { 880 } },
+    counts = { [880] = 4 },
+    apply_aliases = false,
+})
+check('status flint ja fallback', inventory.Status('火打石', 4) == 'ok')
+inventory.SetTestIndex({
+    names = {
+        ['flint stone'] = { 880 },
+        ['火打石'] = { 881 },
+    },
+    counts = { [880] = 4, [881] = 1 },
+})
+local kept_state, kept_have = inventory.Status('火打石', 4)
+check('status flint keeps resource japanese', kept_state == 'partial' and kept_have == 1)
+check('status unknown japanese item', inventory.Status('見たことのない品', 1) == nil)
+check('normalize drops trailing nul', inventory.normalize('Flint Stone\0') == 'flint stone')
 check('jp hides one of three', marked_ja('トカゲの皮3枚を用意。', { ['トカゲの皮'] = 1 }):find('(1/3)', 1, true) ~= nil)
 check('jp hides three is enough', marked_ja('トカゲの皮3枚を用意。', { ['トカゲの皮'] = 3 }):find('VV', 1, true) ~= nil)
 check('jp hides none stays unmarked', marked_ja('トカゲの皮3枚を用意。', { ['トカゲの皮'] = 0 }) == 'トカゲの皮3枚を用意。')

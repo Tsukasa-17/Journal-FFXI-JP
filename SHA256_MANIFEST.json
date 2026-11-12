@@ -1,5 +1,5 @@
 {
-  "Journal/CHANGES_JP.md": "a786bc5045d7d1fc9700676301bdcfcf4a4286492e2aebe5f1d4f791b0d391d7",
+  "Journal/CHANGES_JP.md": "81177341dfa18645ae210fcbce407becdd34d28169eeeb69d67fa27e0dd4e866",
   "Journal/COPYING": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
   "Journal/LICENSE": "4bc852f934fe7f28858842b778d9153edb8b83fdb6e5e50c2af86742d7f3cb3c",
   "Journal/LICENSE_SCOPE.md": "56ad0b4dda26607a6ae1fe9746f0d08bf6902d1d403b4e484492417099d74078",
@@ -130,7 +130,7 @@
   "Journal/zone_aliases.lua": "ca1ca8efcc99b5f10da8e65bc9eb466e41d24b59c00016cda38833f17dd64d51",
   "Journal/zonematch.lua": "b4de3673702f154a106ca0204eeb69a3a1e072be720876594c9f0325bce88d68",
   "Journal/fame.lua": "c06413ea66b8a32d1a79a241d33b435298db4717ae01bec65d4db89e7964e5b2",
-  "Journal/inventory.lua": "4fbeca33ce3d53c802396dfa4e737d899f48bf56f115996452ecef47bdbc24ba",
+  "Journal/inventory.lua": "bb92fdd26f28ed5d3178a9bd5cdb96af8a03b91e2f54a4f533334abf148044e0",
   "Journal/notes.lua": "0f9e3864a486ed27adefe381aca782ce6dfc41163b8b4fc432ee37b5a86639d1",
   "Journal/rank.lua": "d5ecc1de4e83fa3d218d3b2c2135959cd0f1abe81635f5de91803794a2a26ae8",
   "Journal/assets/arrows/fame.png": "b470a6f161e4a5c4db77b9bfee3927227e304a71c0c5abb311cd005fb3c97fa1",
