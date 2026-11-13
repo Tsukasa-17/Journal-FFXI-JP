@@ -346,6 +346,11 @@ local PIN_SCALE_MAX = 2.00
 local PIN_SCALE_STEP = 0.10
 local pin_scale = 1.0
 
+-- Tracker text, 50% to 400%. Fields of M, not locals: this file is already
+-- at LuaJIT's limit for locals and for upvalues in the settings functions.
+M.PIN_TEXT_MIN = 0.50
+M.PIN_TEXT_MAX = 4.00
+
 -- Whether the tracker shows the next step under the current one.
 local pin_show_next = true
 
@@ -1052,10 +1057,11 @@ local function apply_config()
     pin_auto_zone = config.pin_auto_zone == true
     pin_scale = clamp_pin_scale(config.pin_scale)
     M.pin_text_scale = require('font_choice').clamp_scale(
-        config.pin_text_scale, 0.50, 2.00, 1.0)
+        config.pin_text_scale, M.PIN_TEXT_MIN, M.PIN_TEXT_MAX, 1.0)
 
     -- Before pin_layout_v2 the tracker size also scaled the text. Carry
-    -- that into the text size once, so the text keeps its size.
+    -- that into the text size once, so the text keeps its size. That old
+    -- combined size stopped at 200%, so this one-time step still does.
     if config.pin_layout_v2 ~= true then
         M.pin_text_scale = require('font_choice').clamp_scale(
             M.pin_text_scale * pin_scale, 0.50, 2.00, 1.0)
@@ -3707,7 +3713,7 @@ function M.SetPinHeight(value)
     return height
 end
 
--- Tracker text size, 50% to 200%, separate from the Journal text size
+-- Tracker text size, 50% to 400%, separate from the Journal text size
 -- and from pin_scale. Saved values such as 79% are not rounded away.
 function M.GetPinTextScale()
     return M.pin_text_scale or 1.0
@@ -3715,7 +3721,7 @@ end
 
 function M.SetPinTextScale(value)
     local scale = require('font_choice').clamp_scale(
-        value, 0.50, 2.00, M.pin_text_scale or 1.0)
+        value, M.PIN_TEXT_MIN, M.PIN_TEXT_MAX, M.pin_text_scale or 1.0)
 
     if scale == M.pin_text_scale then
         return scale

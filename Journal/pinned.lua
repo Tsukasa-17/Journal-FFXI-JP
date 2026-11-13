@@ -13,7 +13,8 @@
 -- or /journal pin next|prev|reset) or by the zone-change check.
 -- Each item has a thumbtack: it unpins the item. The item stays on the list
 -- for a few seconds, with an empty thumbtack, so it can be pinned again.
--- The mode and the visibility of the tracker are set in the settings.
+-- The mode and the visibility of the tracker are the same setting everywhere:
+-- the X on this window, the button on the Journal, and /journal pin.
 
 local imgui = require('imgui')
 local icons = require('icons')
@@ -37,6 +38,11 @@ local size_placed = false
 local size_refit = 0
 local applied_scale = nil
 local seen_w, seen_h = nil, nil
+
+-- A few frames that fit the height after the text size changes. Width
+-- (pin_scale) is not part of this. 0 means the saved height stays.
+local text_refit = 0
+local applied_text = nil
 
 local WINDOW_WIDTH = 420
 local TAB_NAME_LENGTH = 12
@@ -301,6 +307,111 @@ function M.LayoutScale(pin)
     }
 end
 
+-- Lines that fit in max_width. measure(text) returns a width. English
+-- breaks on spaces; anything wider than the line breaks one character at
+-- a time, so a large tracker font still stays inside the window.
+function M.FitLines(text, max_width, measure)
+    text = tostring(text or '')
+    max_width = tonumber(max_width) or 0
+
+    if text == '' or type(measure) ~= 'function' or max_width <= 0 then
+        return { text }
+    end
+
+    local whole = measure(text)
+
+    if type(whole) ~= 'number' or whole ~= whole or whole <= max_width then
+        return { text }
+    end
+
+    local char_end = require('style_ja').char_end
+    local lines = {}
+    local line = ''
+    local i = 1
+    local n = #text
+
+    local function emit()
+        local trimmed = line:gsub('%s+$', '')
+
+        if trimmed ~= '' then
+            lines[#lines + 1] = trimmed
+        end
+
+        line = ''
+    end
+
+    local function append_chars(chunk)
+        local k = 1
+
+        while k <= #chunk do
+            local ke = char_end(chunk, k)
+            local one = chunk:sub(k, ke)
+
+            if line ~= '' and measure(line .. one) > max_width then
+                emit()
+            end
+
+            line = line .. one
+            k = ke + 1
+        end
+    end
+
+    while i <= n do
+        local e = char_end(text, i)
+        local ch = text:sub(i, e)
+
+        if ch:byte() < 128 and ch ~= ' ' and ch ~= '\t' then
+            local j = e + 1
+
+            while j <= n do
+                local e2 = char_end(text, j)
+                local c2 = text:sub(j, e2)
+
+                if c2:byte() >= 128 or c2 == ' ' or c2 == '\t' then
+                    break
+                end
+
+                e = e2
+                j = e + 1
+            end
+
+            ch = text:sub(i, e)
+        end
+
+        if ch ~= ' ' and ch ~= '\t' then
+            if line == '' then
+                if measure(ch) > max_width then
+                    append_chars(ch)
+                else
+                    line = ch
+                end
+            elseif measure(line .. ch) > max_width then
+                emit()
+
+                if measure(ch) > max_width then
+                    append_chars(ch)
+                else
+                    line = ch
+                end
+            else
+                line = line .. ch
+            end
+        elseif line ~= '' and measure(line .. ' ') <= max_width then
+            line = line .. ' '
+        end
+
+        i = e + 1
+    end
+
+    emit()
+
+    if #lines == 0 then
+        return { text }
+    end
+
+    return lines
+end
+
 -- Height of the stacked list. A saved window height caps it so the list
 -- and the window do not each grow their own scrollbar. 0 means no cap.
 -- Sixteen pixels stay free at the corner for the resize grip.
@@ -341,9 +452,20 @@ local function button_width(label)
     return text_width(label) + FRAME_PADDING_X * 2
 end
 
+-- Free width from the cursor to the right edge. A scrollbar (the stacked
+-- height limit) is already out of that width.
+local function content_width()
+    local ok_avail, avail = pcall(imgui.GetContentRegionAvail)
+    local ok_x, x = pcall(imgui.GetCursorPosX)
+
+    if ok_avail and ok_x and tonumber(avail) ~= nil and tonumber(x) ~= nil then
+        return math.max(1, avail)
+    end
+
+    return math.max(1, imgui.GetWindowWidth() - WINDOW_PADDING * 2)
+end
+
 -- Moves the cursor so that something this wide ends at the right edge.
--- The right edge is read from the free space of the line, so a scrollbar
--- (the stacked height limit) does not cover the end of the text.
 local function align_right(width)
     local edge = imgui.GetWindowWidth() - WINDOW_PADDING
     local ok_avail, avail = pcall(imgui.GetContentRegionAvail)
@@ -358,7 +480,7 @@ end
 
 -- One line of text flush right, with a shadow. With icon_color, an infinity
 -- sign follows the text (the repeatable quests).
-local function right_text(color, text, icon_color, lead)
+local function draw_right_line(color, text, icon_color, lead)
     local line_height = imgui.GetTextLineHeight()
     local icon_width, icon_height = 0, 0
     local icon_gap = 0
@@ -449,6 +571,61 @@ local function right_text(color, text, icon_color, lead)
 
     -- Where the text is, in window coordinates, for a button over it.
     return text_x, text_y, text_width(text) + icon_gap + icon_width, line_height
+end
+
+-- Flush right, and on more than one line when the font is wider than the
+-- window. Icons stay on the first line (the picture) and the last line
+-- (the infinity sign). A line that already fits is drawn once, as before.
+local function right_text(color, text, icon_color, lead)
+    local line_height = imgui.GetTextLineHeight()
+    local icon_width = 0
+    local icon_gap = 0
+    local lead_width = 0
+
+    if icon_color ~= nil then
+        icon_width = (icons.infinity_size(line_height))
+        icon_gap = 8
+    end
+
+    if lead ~= nil and lead.width and lead.height and imgui.Dummy and imgui.SameLine then
+        lead_width = line_height * lead.width / lead.height
+    end
+
+    local extras = icon_gap + icon_width
+        + (lead_width > 0 and lead_width + 4 or 0)
+    local room = content_width()
+    local lines = { text }
+
+    if text_width(text) + extras > room then
+        lines = M.FitLines(text, math.max(8, room - extras), text_width)
+    end
+
+    local origin_x, origin_y, right, bottom = nil, nil, nil, nil
+
+    for index, line in ipairs(lines) do
+        local x, y, w, h = draw_right_line(
+            color,
+            line,
+            index == #lines and icon_color or nil,
+            index == 1 and lead or nil
+        )
+
+        if x ~= nil and y ~= nil then
+            origin_x = origin_x == nil and x or math.min(origin_x, x)
+            origin_y = origin_y or y
+            right = math.max(right or 0, x + (w or 0))
+            bottom = math.max(bottom or 0, y + (h or line_height))
+        end
+    end
+
+    if origin_x == nil then
+        return nil, nil, 0, line_height
+    end
+
+    return origin_x,
+        origin_y,
+        math.max(0, right - origin_x),
+        math.max(line_height, bottom - origin_y)
 end
 
 -- An invisible button over a line drawn by right_text. A plain Text item
@@ -1045,6 +1222,29 @@ local function prune_ghosts(pins)
     end
 end
 
+-- The X at the top right. It hides the tracker through the same visibility
+-- setting as the Journal button and /journal pin.
+local function draw_close(controller)
+    align_right(button_width('X'))
+
+    imgui.PushStyleColor(ImGuiCol_Button, { 0.55, 0.55, 0.55, 0.45 })
+    imgui.PushStyleColor(ImGuiCol_ButtonHovered, { 0.85, 0.45, 0.45, 0.75 })
+    imgui.PushStyleColor(ImGuiCol_ButtonActive, { 0.75, 0.30, 0.30, 0.90 })
+    imgui.PushStyleColor(ImGuiCol_Text, { 1.00, 1.00, 1.00, 1.00 })
+
+    local clicked = imgui.SmallButton('X##pin_close')
+
+    imgui.PopStyleColor(4)
+
+    if imgui.IsItemHovered() and imgui.SetTooltip then
+        imgui.SetTooltip(i18n.t('Hide the Tracker'))
+    end
+
+    if clicked and controller.SetPinVisible ~= nil then
+        controller.SetPinVisible(false)
+    end
+end
+
 function M.Draw(controller, can_draw)
     if controller == nil
         or controller.GetPinState == nil then
@@ -1060,6 +1260,7 @@ function M.Draw(controller, can_draw)
     if pin == nil or not pin.visible then
         size_placed = false
         size_refit = 0
+        text_refit = 0
         seen_w, seen_h = nil, nil
 
         return
@@ -1093,7 +1294,8 @@ function M.Draw(controller, can_draw)
     end
 
     -- Tracker size and the tracker's own text scale. The Journal text
-    -- size is not read here. Width scales with the font so wrap holds.
+    -- size is not read here. Width stays the tracker size; a larger font
+    -- wraps, and the height fits the new lines.
     local layout = M.LayoutScale(pin)
     local scale = layout.scale
 
@@ -1101,8 +1303,8 @@ function M.Draw(controller, can_draw)
 
     -- The settings stepper (and /journal pin size) changed the width.
     -- Apply that width once. A drag updates the same scale, so it does
-    -- not come back through here and fight the mouse. Text size and bold
-    -- are not part of this scale, so they leave the saved window alone.
+    -- not come back through here and fight the mouse. Text size is not
+    -- part of this width; the height fit below follows the font.
     if applied_scale ~= nil
         and math.abs(layout.size_scale - applied_scale) > 0.001 then
 
@@ -1128,7 +1330,21 @@ function M.Draw(controller, can_draw)
         size_refit = 3
     end
 
-    if size_refit > 0 then
+    -- Text size changed: fit the height to the new lines. Width stays
+    -- layout.width, which is the tracker size the player already set.
+    -- The first time this window is shown, a saved height is kept.
+    if applied_text ~= nil
+        and math.abs(layout.text_scale - applied_text) > 0.001 then
+
+        text_refit = 3
+        seen_h = nil
+    end
+
+    applied_text = layout.text_scale
+
+    local fitting = size_refit > 0 or text_refit > 0
+
+    if fitting then
         imgui.SetNextWindowSize({ layout.width, 0 })
     elseif not size_placed and pin.height ~= nil then
         imgui.SetNextWindowSize({ layout.width, pin.height })
@@ -1171,7 +1387,7 @@ function M.Draw(controller, can_draw)
         + ImGuiWindowFlags_NoCollapse
 
     -- While the window is still fitting its content it must not scroll.
-    if size_refit > 0 or pin.height == nil then
+    if fitting or pin.height == nil then
         flags = flags + ImGuiWindowFlags_NoScrollbar
     end
 
@@ -1200,6 +1416,8 @@ function M.Draw(controller, can_draw)
         elseif imgui.SetWindowFontScale ~= nil then
             pcall(imgui.SetWindowFontScale, scale)
         end
+
+        draw_close(controller)
 
         if #pins == 0 and #ghosts == 0 then
             right_text(
@@ -1230,10 +1448,16 @@ function M.Draw(controller, can_draw)
         -- Width is stored as the tracker size, so the settings stepper
         -- shows the same value. Height is stored on its own. Text size
         -- is never changed here.
-        if size_refit > 0 then
-            size_refit = size_refit - 1
+        if size_refit > 0 or text_refit > 0 then
+            if size_refit > 0 then
+                size_refit = size_refit - 1
+            end
 
-            if size_refit == 0 and controller.SetPinHeight then
+            if text_refit > 0 then
+                text_refit = text_refit - 1
+            end
+
+            if size_refit == 0 and text_refit == 0 and controller.SetPinHeight then
                 controller.SetPinHeight(window_height)
                 seen_w, seen_h = window_width, window_height
             end

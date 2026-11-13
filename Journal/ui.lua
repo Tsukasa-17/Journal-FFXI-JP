@@ -3510,6 +3510,43 @@ local function draw_journal_toolbar(
             end
         end
 
+        -- Shows or hides the tracker. Same visibility as the X on the
+        -- tracker and /journal pin. The words say ON or OFF, and the
+        -- button is filled while the tracker is shown.
+        local tracker_width = 0
+
+        if controller.GetPinState and controller.SetPinVisible then
+            local pin_now = controller.GetPinState()
+
+            if pin_now ~= nil then
+                imgui.SameLine(0, 8)
+
+                local tracker_on = pin_now.visible == true
+                local tracker_on_label = tx('Tracker ON')
+                local tracker_off_label = tx('Tracker OFF')
+
+                tracker_width = math.max(
+                    imgui.CalcTextSize(tracker_on_label),
+                    imgui.CalcTextSize(tracker_off_label)
+                ) + 36
+
+                if toolbar_mode_button(
+                    tx((tracker_on and 'Tracker ON' or 'Tracker OFF')
+                        .. '##JournalTrackerToggle'),
+                    tracker_on,
+                    tracker_width
+                ) then
+                    controller.SetPinVisible(not tracker_on)
+                end
+
+                if imgui.IsItemHovered() and imgui.SetTooltip then
+                    imgui.SetTooltip(
+                        tx('Show or hide the pinned tracker.')
+                    )
+                end
+            end
+        end
+
         -- The menu groups the guide, the camps and the functions to come.
         -- Its button sits at the right corner, left of Settings.
         local menu_entries = {}
@@ -3667,6 +3704,7 @@ local function draw_journal_toolbar(
                             - menu_width
                             - compass_width
                             - notesx.btn_w
+                            - tracker_width
                             - 190
                     )
                 )
