@@ -33,16 +33,18 @@ local restore_window = true
 -- Drag-resize, in the same way as the compass. The width is the tracker
 -- size (pin_scale). The height is remembered on its own. Text size is not
 -- part of either. size_refit is the few frames that fit the content before
--- a height has been saved.
+-- a height has been saved. A later change of text size or tracker size
+-- must not make that height shorter.
 local size_placed = false
 local size_refit = 0
 local applied_scale = nil
+local applied_text = nil
 local seen_w, seen_h = nil, nil
 
--- A few frames that fit the height after the text size changes. Width
--- (pin_scale) is not part of this. 0 means the saved height stays.
-local text_refit = 0
-local applied_text = nil
+-- Frames left holding the player's height after a text-size or tracker-size
+-- change. 0 means the window is the player's again, including a drag.
+local height_lock = nil
+local height_lock_frames = 0
 
 local WINDOW_WIDTH = 420
 local TAB_NAME_LENGTH = 12
@@ -305,6 +307,24 @@ function M.LayoutScale(pin)
         text_scale = text_scale,
         size_scale = size_scale,
     }
+end
+
+-- Height to keep when the text size or the tracker size changes.
+-- A height the player already set is returned as it is, whether the text
+-- would now be shorter or taller. No saved height yet: the measurement
+-- stands (the first fit uses 0, which means "as tall as the text").
+function M.HoldHeight(saved_height, measured_height)
+    saved_height = tonumber(saved_height)
+
+    if saved_height == nil
+        or saved_height ~= saved_height
+        or saved_height <= 0
+        or saved_height == math.huge then
+
+        return tonumber(measured_height)
+    end
+
+    return saved_height
 end
 
 -- Lines that fit in max_width. measure(text) returns a width. English
@@ -1260,7 +1280,8 @@ function M.Draw(controller, can_draw)
     if pin == nil or not pin.visible then
         size_placed = false
         size_refit = 0
-        text_refit = 0
+        height_lock = nil
+        height_lock_frames = 0
         seen_w, seen_h = nil, nil
 
         return
@@ -1294,57 +1315,60 @@ function M.Draw(controller, can_draw)
     end
 
     -- Tracker size and the tracker's own text scale. The Journal text
-    -- size is not read here. Width stays the tracker size; a larger font
-    -- wraps, and the height fits the new lines.
+    -- size is not read here. Width follows the tracker size. A height the
+    -- player already has is kept; text that no longer fits scrolls.
     local layout = M.LayoutScale(pin)
     local scale = layout.scale
 
     current_size = layout.font
 
+    local text_changed = applied_text ~= nil
+        and math.abs(layout.text_scale - applied_text) > 0.001
+    local width_changed = applied_scale ~= nil
+        and math.abs(layout.size_scale - applied_scale) > 0.001
+
+    applied_text = layout.text_scale
+
     -- The settings stepper (and /journal pin size) changed the width.
     -- Apply that width once. A drag updates the same scale, so it does
-    -- not come back through here and fight the mouse. Text size is not
-    -- part of this width; the height fit below follows the font.
-    if applied_scale ~= nil
-        and math.abs(layout.size_scale - applied_scale) > 0.001 then
-
+    -- not come back through here and fight the mouse.
+    if width_changed then
         size_placed = false
         seen_w = nil
         applied_scale = layout.size_scale
-
-        if pin.height ~= nil then
-            size_refit = 0
-        end
+        size_refit = 0
     end
 
     if applied_scale == nil then
         applied_scale = layout.size_scale
     end
 
+    -- Text size or tracker size: hold the height the player already set.
+    -- Never fit the window to the text, which would pull the top and
+    -- bottom in when the new lines are shorter.
+    if (text_changed or width_changed) and height_lock_frames == 0 then
+        local keep = tonumber(pin.height) or tonumber(seen_h)
+
+        if keep ~= nil and keep == keep and keep > 0 and keep ~= math.huge then
+            height_lock = keep
+            height_lock_frames = 3
+        end
+    end
+
     -- No saved height yet: fit the content for a few frames, then keep it.
     -- Once a height is saved, including one the player dragged, a change
     -- in the pinned list must not fit the window again. Extra rows scroll.
-    if pin.height ~= nil then
+    if pin.height ~= nil or height_lock ~= nil then
         size_refit = 0
     elseif not size_placed and size_refit == 0 then
         size_refit = 3
     end
 
-    -- Text size changed: fit the height to the new lines. Width stays
-    -- layout.width, which is the tracker size the player already set.
-    -- The first time this window is shown, a saved height is kept.
-    if applied_text ~= nil
-        and math.abs(layout.text_scale - applied_text) > 0.001 then
+    local fitting = size_refit > 0 and height_lock == nil
 
-        text_refit = 3
-        seen_h = nil
-    end
-
-    applied_text = layout.text_scale
-
-    local fitting = size_refit > 0 or text_refit > 0
-
-    if fitting then
+    if height_lock ~= nil and (height_lock_frames > 0 or not size_placed) then
+        imgui.SetNextWindowSize({ layout.width, height_lock })
+    elseif fitting then
         imgui.SetNextWindowSize({ layout.width, 0 })
     elseif not size_placed and pin.height ~= nil then
         imgui.SetNextWindowSize({ layout.width, pin.height })
@@ -1387,7 +1411,8 @@ function M.Draw(controller, can_draw)
         + ImGuiWindowFlags_NoCollapse
 
     -- While the window is still fitting its content it must not scroll.
-    if fitting or pin.height == nil then
+    -- A height the player set stays put, and extra lines scroll.
+    if fitting or (pin.height == nil and height_lock == nil) then
         flags = flags + ImGuiWindowFlags_NoScrollbar
     end
 
@@ -1446,18 +1471,35 @@ function M.Draw(controller, can_draw)
 
         -- The fit of the first frames, then whatever the player drags.
         -- Width is stored as the tracker size, so the settings stepper
-        -- shows the same value. Height is stored on its own. Text size
-        -- is never changed here.
-        if size_refit > 0 or text_refit > 0 then
-            if size_refit > 0 then
-                size_refit = size_refit - 1
+        -- shows the same value. Height is stored on its own. A text-size
+        -- or tracker-size change does not store a shorter height.
+        if height_lock ~= nil and height_lock_frames > 0 then
+            height_lock_frames = height_lock_frames - 1
+
+            if controller.SetPinScale and (
+                seen_w == nil or math.abs(window_width - seen_w) > 2
+            ) then
+                applied_scale = controller.SetPinScale(
+                    window_width / WINDOW_WIDTH
+                )
             end
 
-            if text_refit > 0 then
-                text_refit = text_refit - 1
+            local kept = M.HoldHeight(height_lock, window_height)
+
+            if controller.SetPinHeight and pin.height ~= kept then
+                controller.SetPinHeight(kept)
             end
 
-            if size_refit == 0 and text_refit == 0 and controller.SetPinHeight then
+            seen_w = window_width
+            seen_h = kept
+
+            if height_lock_frames == 0 then
+                height_lock = nil
+            end
+        elseif size_refit > 0 then
+            size_refit = size_refit - 1
+
+            if size_refit == 0 and controller.SetPinHeight then
                 controller.SetPinHeight(window_height)
                 seen_w, seen_h = window_width, window_height
             end
