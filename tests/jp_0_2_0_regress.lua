@@ -97,6 +97,31 @@ check('tracker scale default', base.font == 16 and base.width == 420)
 check('tracker text 200 keeps width', big.font == 32 and big.width == 420)
 check('tracker window size keeps text', wide.font == 16 and wide.width == 840)
 check('tracker size and text independent', half.font == 8 and half.width == 840)
+local huge = pinned.LayoutScale({ scale = 1.5, text_scale = 4 })
+check('tracker text 400 keeps width', huge.font == 64 and huge.width == 630 and huge.text_scale == 4)
+local function columns(text)
+    local width = 0
+    local index = 1
+    while index <= #text do
+        local last = require('style_ja').char_end(text, index)
+        width = width + (text:byte(index) < 128 and 1 or 2)
+        index = last + 1
+    end
+    return width
+end
+local cjk = pinned.FitLines('あいうえお', 4, columns)
+check('wrap cjk pairs', cjk[1] == 'あい' and cjk[2] == 'うえ' and cjk[3] == 'お' and #cjk == 3)
+local wrapped = pinned.FitLines('one two three', 7, columns)
+check('wrap english words', wrapped[1] == 'one two' and wrapped[2] == 'three')
+local fits = pinned.FitLines('short', 40, columns)
+check('wrap keeps short line', #fits == 1 and fits[1] == 'short')
+local hard = pinned.FitLines('Hello', 3, columns)
+check('wrap long word', hard[1] == 'Hel' and hard[2] == 'lo')
+check('hold rejects shorter window', pinned.HoldHeight(360, 120) == 360)
+check('hold rejects taller window', pinned.HoldHeight(360, 800) == 360)
+check('hold keeps saved height', pinned.HoldHeight(360, 360) == 360)
+check('hold without saved uses measured', pinned.HoldHeight(nil, 200) == 200)
+check('hold ignores empty saved', pinned.HoldHeight(0, 180) == 180)
 check('stack limit off', pinned.StackLimit(0, nil) == 0)
 check('stack limit kept', pinned.StackLimit(480, nil) == 480)
 check('stack limit fits window', pinned.StackLimit(480, 200) == 184)
@@ -152,6 +177,7 @@ end
 ashita = { events = { register = function() end } }
 local logic = require('logic')
 logic.Initialize()
+check('pin hidden on load', logic.GetPinState().visible == false)
 local quest_tabs = logic.GetQuestCategories()
 check('catseye tab last', quest_tabs[#quest_tabs] == 'catseye' and quest_tabs[#quest_tabs - 1] == 'crystal_war' and quest_tabs[1] == 'all')
 check('catseye label', logic.GetQuestCategoryNames().catseye == 'CatsEye')
@@ -186,9 +212,24 @@ check('journal scale independent', math.abs(logic.GetTextScale() - 0.79) < 0.000
 check('pin scale independent', math.abs(logic.GetPinScale() - 1.5) < 0.0001)
 check('prox compass untouched', logic.GetProxCompass() == true)
 check('pin text low bound', math.abs(logic.SetPinTextScale(0.2) - 0.5) < 0.0001)
-check('pin text high bound', math.abs(logic.SetPinTextScale(3) - 2.0) < 0.0001)
+check('pin text 300 kept', math.abs(logic.SetPinTextScale(3) - 3) < 0.0001)
+check('pin text 400 kept', math.abs(logic.SetPinTextScale(4) - 4) < 0.0001)
+check('pin text high bound', math.abs(logic.SetPinTextScale(5) - 4) < 0.0001)
+check('pin text max field', logic.PIN_TEXT_MAX == 4 and logic.PIN_TEXT_MIN == 0.5)
 check('pin text 79 kept', math.abs(logic.SetPinTextScale(0.79) - 0.79) < 0.0001)
 check('pin text step', math.abs(logic.AdjustPinTextScale(1) - 0.84) < 0.0001)
+local book_before = logic.GetJournalWindowState()
+local pin_window = logic.GetPinScale()
+local book_scale = logic.GetTextScale()
+local stepped = logic.GetPinTextScale()
+logic.SetPinTextScale(4)
+local book_after = logic.GetJournalWindowState()
+check('tracker text leaves book size',
+    book_after.width == book_before.width and book_after.height == book_before.height)
+check('tracker text leaves pin window', math.abs(logic.GetPinScale() - pin_window) < 0.0001)
+check('tracker text leaves book scale', math.abs(logic.GetTextScale() - book_scale) < 0.0001)
+logic.SetPinTextScale(stepped)
+check('tracker text restored', math.abs(logic.GetPinTextScale() - stepped) < 0.0001)
 
 check('settings size missing', logic.GetSettingsWindowSize() == nil)
 logic.SetSettingsWindowSize(730, 810)
@@ -207,8 +248,14 @@ check('huge settings size rejected', logic.SetSettingsWindowSize(20000, 10) == f
 gw, gh = logic.GetSettingsWindowSize()
 check('rejected size not stored', gw == 730 and gh == 810)
 
+logic.SetPinVisible(true)
+check('pin show', logic.GetPinState().visible == true)
+logic.TogglePinVisible()
+check('pin hide toggle', logic.GetPinState().visible == false)
+logic.SetPinVisible(true)
 logic.Unload()
 check('saved pin text', math.abs(config.pin_text_scale - logic.GetPinTextScale()) < 0.0001)
+check('saved pin open', config.pin_open == true)
 check('saved settings size', config.settings_width == 730 and config.settings_height == 810)
 check('saved journal scale', math.abs(config.journal_text_scale - 1.2) < 0.0001)
 check('saved prox compass', config.announce_prox_compass == true)
@@ -250,9 +297,41 @@ check('invalid loaded size clears', logic.GetSettingsWindowSize() == nil)
 check('invalid load keeps journal scale', math.abs(logic.GetTextScale() - 0.9) < 0.0001)
 check('invalid load keeps position fields', logic.GetJournalWindowState().x == 12)
 
+handler({
+    pin_layout_v2 = true,
+    pin_text_scale = 2,
+    pin_scale = 0.9,
+    journal_text_scale = 0.8,
+    journal_width = 1100,
+    journal_height = 720,
+})
+check('saved 200 still loads', math.abs(logic.GetPinTextScale() - 2) < 0.0001)
+handler({
+    pin_layout_v2 = true,
+    pin_text_scale = 3.5,
+    pin_scale = 0.9,
+    journal_text_scale = 0.8,
+    journal_width = 1100,
+    journal_height = 720,
+})
+check('saved 350 loads', math.abs(logic.GetPinTextScale() - 3.5) < 0.0001)
+check('350 leaves pin window', math.abs(logic.GetPinScale() - 0.9) < 0.0001)
+check('350 leaves journal text', math.abs(logic.GetTextScale() - 0.8) < 0.0001)
+local book350 = logic.GetJournalWindowState()
+check('350 leaves book size', book350.width == 1100 and book350.height == 720)
+handler({
+    pin_layout_v2 = true,
+    pin_text_scale = 9,
+    pin_scale = 1,
+    journal_text_scale = 1,
+    journal_width = 1000,
+    journal_height = 700,
+})
+check('loaded text clamped', math.abs(logic.GetPinTextScale() - 4) < 0.0001)
+
 local credit = require('jp_credit')
-check('jp credit 0.3.3', credit.version == '0.3.3' and credit.display('0.3.7'):find('0.3.7', 1, true) ~= nil)
-check('jp credit keeps tsukasa', credit.display('0.3.7'):find('[jpver 0.3.3 by Tsukasa]', 1, true) ~= nil)
+check('jp credit 0.3.4', credit.version == '0.3.4' and credit.display('0.3.7'):find('0.3.7', 1, true) ~= nil)
+check('jp credit keeps tsukasa', credit.display('0.3.7'):find('[jpver 0.3.4 by Tsukasa]', 1, true) ~= nil)
 check('jp contributor hando', credit.contributor_line:find('協力者: hando', 1, true) ~= nil)
 local mini_src = io.open('/workspace/Journal/mini_icon.lua'):read('*a')
 check('book has no tooltip', mini_src:find('BeginTooltip', 1, true) == nil and mini_src:find('SetTooltip', 1, true) == nil)
@@ -260,8 +339,22 @@ check('book still clicks', mini_src:find("InvisibleButton('##JournalMiniImage'",
 local pin_src = io.open('/workspace/Journal/pinned.lua'):read('*a')
 check('tracker corner resizes', pin_src:find('SetNextWindowSizeConstraints', 1, true) ~= nil)
 check('tracker width stays scale', pin_src:find('window_width / WINDOW_WIDTH', 1, true) ~= nil)
-check('tracker keeps dragged height', pin_src:find('if pin.height ~= nil then', 1, true) ~= nil)
+check('tracker keeps dragged height', pin_src:find('pin.height ~= nil or height_lock ~= nil', 1, true) ~= nil)
+check('tracker close hides',
+    pin_src:find("X##pin_close", 1, true) ~= nil
+    and pin_src:find('SetPinVisible(false)', 1, true) ~= nil)
+check('tracker text does not refit shorter', pin_src:find('text_refit', 1, true) == nil)
+check('tracker holds height', pin_src:find('function M.HoldHeight', 1, true) ~= nil)
+check('tracker lock keeps saved height', pin_src:find('height_lock', 1, true) ~= nil)
+check('tracker wraps wide lines', pin_src:find('function M.FitLines', 1, true) ~= nil)
+local ui_ja = require('data.ui_ja')
+check('tracker on ja', ui_ja['Tracker ON'] == 'トラッカー ON')
+check('tracker off ja', ui_ja['Tracker OFF'] == 'トラッカー OFF')
+check('tracker hide ja', ui_ja['Hide the Tracker'] == 'トラッカーを隠す')
 local ui_src = io.open('/workspace/Journal/ui.lua'):read('*a')
+check('book tracker toggle',
+    ui_src:find('##JournalTrackerToggle', 1, true) ~= nil
+    and ui_src:find('SetPinVisible(not tracker_on)', 1, true) ~= nil)
 check('compass content does not resize', ui_src:find('clipped_signature', 1, true) == nil and ui_src:find('GetScrollMaxY', 1, true) == nil)
 check('compass text does not resize', ui_src:find('last_scale', 1, true) == nil)
 check('compass wraps like tracker', ui_src:find('Compass lines wrap to the window', 1, true) ~= nil)
